@@ -28,7 +28,20 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you attach images to your notes.",
+          "cameraPermission": "The app uses your camera to let you take photos for your notes."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "The app uses your microphone to record voice notes."
+        }
+      ]
     ]
   }
 }

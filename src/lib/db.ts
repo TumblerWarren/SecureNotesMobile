@@ -44,9 +44,28 @@ export async function initDB() {
       id TEXT PRIMARY KEY,
       title TEXT,
       content TEXT,
-      updatedAt INTEGER
+      updatedAt INTEGER,
+      isPinned INTEGER DEFAULT 0,
+      type TEXT DEFAULT 'text'
     );
   `);
+
+    // Migration: Add columns if they don't exist
+    await ensureSchema();
+}
+
+async function ensureSchema() {
+    if (!db) return;
+    try {
+        await db.execAsync('ALTER TABLE notes ADD COLUMN isPinned INTEGER DEFAULT 0;');
+    } catch (e) {
+        // Column likely already exists
+    }
+    try {
+        await db.execAsync("ALTER TABLE notes ADD COLUMN type TEXT DEFAULT 'text';");
+    } catch (e) {
+        // Column likely already exists
+    }
 }
 
 // ... importDB, exportDB, runQuery, deleteNote, runCommand ...
@@ -114,6 +133,9 @@ export async function importDB(data: Uint8Array) {
         }
     }
     db = await SQLite.openDatabaseAsync(DB_NAME);
+
+    // Ensure schema is up to date after import
+    await ensureSchema();
 }
 
 export async function exportDB(): Promise<Uint8Array> {

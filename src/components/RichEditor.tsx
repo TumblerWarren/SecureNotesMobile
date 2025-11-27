@@ -108,6 +108,22 @@ const getHtmlTemplate = (isDarkMode: boolean) => {
   // Android
   document.addEventListener('message', handleMessage);
 
+  document.addEventListener('paste', function(e) {
+    var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (var index in items) {
+        var item = items[index];
+        if (item.kind === 'file' && item.type.indexOf('image/') !== -1) {
+            var blob = item.getAsFile();
+            var reader = new FileReader();
+            reader.onload = function(event) {
+                document.execCommand('insertHTML', false, '<img src="' + event.target.result + '" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" />');
+            };
+            reader.readAsDataURL(blob);
+            e.preventDefault();
+        }
+    }
+  });
+
 </script>
 </body>
 </html>
