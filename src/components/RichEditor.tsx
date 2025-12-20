@@ -5,6 +5,7 @@ import { View, StyleSheet } from 'react-native';
 interface Props {
     initialContent?: string;
     onChange?: (content: string) => void;
+    onSelectionChange?: (formats: string[]) => void;
     isDarkMode?: boolean;
 }
 
@@ -124,13 +125,40 @@ const getHtmlTemplate = (isDarkMode: boolean) => {
     }
   });
 
-</script>
+    const checkSelection = debounce(() => {
+        const formats = [];
+        if (document.queryCommandState('bold')) formats.push('bold');
+        if (document.queryCommandState('italic')) formats.push('italic');
+        if (document.queryCommandState('insertUnorderedList')) formats.push('list');
+        // Check for link
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            let parent = selection.getRangeAt(0).startContainer.parentElement;
+            while (parent && parent.id !== 'editor') {
+                if (parent.tagName === 'A') {
+                    formats.push('link');
+                    break;
+                }
+                parent = parent.parentElement;
+            }
+        }
+        
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'selection', data: formats }));
+    }, 200);
+
+    document.addEventListener('selectionchange', checkSelection);
+    
+    // Also check on click/keyup just in case
+    editor.addEventListener('click', checkSelection);
+    editor.addEventListener('keyup', checkSelection);
+
+  </script>
 </body>
 </html>
 `;
 };
 
-export const RichEditor = forwardRef<RichEditorRef, Props>(({ initialContent = '', onChange, isDarkMode = true }, ref) => {
+export const RichEditor = forwardRef<RichEditorRef, Props>(({ initialContent = '', onChange, onSelectionChange, isDarkMode = true }, ref) => {
     const webviewRef = useRef<WebView>(null);
     const source = useMemo(() => ({ html: getHtmlTemplate(isDarkMode) }), []); // Initial load only
 
@@ -138,6 +166,7 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(({ initialContent = '
         format: (command, value) => {
             const script = `
                 handleMessage({ data: JSON.stringify({ type: 'format', command: '${command}', value: '${(value || '').replace(/'/g, "\\'")}' }) });
+                setTimeout(checkSelection, 100); 
             `;
             webviewRef.current?.injectJavaScript(script);
         },
@@ -181,6 +210,8 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(({ initialContent = '
             const data = JSON.parse(event.nativeEvent.data);
             if (data.type === 'content' && onChange) {
                 onChange(data.data);
+            } else if (data.type === 'selection' && onSelectionChange) {
+                onSelectionChange(data.data);
             }
         } catch (e) {
             // ignore

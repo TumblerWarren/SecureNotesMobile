@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, FlatList, TextInput, Alert, BackHandler, Modal, KeyboardAvoidingView, Platform, useColorScheme, Keyboard, Image } from 'react-native';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,10 +10,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import { RichEditor, RichEditorRef } from '../components/RichEditor';
-import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 import { runOnJS } from 'react-native-reanimated';
-import Slider from '@react-native-community/slider';
-import ColorPicker, { Panel1, Swatches, Preview, OpacitySlider, HueSlider } from 'reanimated-color-picker';
+import { DrawingEditor, DrawingEditorRef } from '../components/DrawingEditor';
 
 interface Note {
     id: string;
@@ -59,7 +57,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
     // Drawing Modal State (for Text notes - unused now but kept for reference if needed, though logic removed)
     // const [isDrawingModalVisible, setIsDrawingModalVisible] = useState(false);
-    const signatureRef = useRef<SignatureViewRef>(null);
+    const drawingRef = useRef<DrawingEditorRef>(null);
 
     // Toolbar State
     const [showFormatMenu, setShowFormatMenu] = useState(false);
@@ -70,17 +68,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
     // Drawing State
     const [initialDrawing, setInitialDrawing] = useState('');
-    const [penColor, setPenColor] = useState('black');
-    const [penWidth, setPenWidth] = useState(3);
-    const [isEraser, setIsEraser] = useState(false);
 
-    // Advanced Drawing Tools State
-    const [isColorPickerVisible, setIsColorPickerVisible] = useState(false);
-    const [isSizeSliderVisible, setIsSizeSliderVisible] = useState(false);
-    const [tempPenWidth, setTempPenWidth] = useState(3);
+    // Text Formatting State
+    const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
     useEffect(() => {
         if (selectedNote?.type === 'drawing') {
+            console.log('[EditorScreen] Initializing drawing for note:', selectedNote.id);
             setInitialDrawing(selectedNote.content);
         }
     }, [selectedNote?.id]);
@@ -88,21 +82,37 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     const editorRef = useRef<RichEditorRef>(null);
     const insets = useSafeAreaInsets();
     const colorScheme = useColorScheme();
+
+
+
+    // Handling Selection Change from RichEditor
+    const handleSelectionChange = useCallback((formats: string[]) => {
+        setActiveFormats(formats);
+    }, []);
+
+
+
+
+
     const isDarkMode = colorScheme === 'dark';
 
     useEffect(() => {
+        console.log('[EditorScreen] Mounted');
         loadNotes();
+        return () => console.log('[EditorScreen] Unmounted');
     }, []);
 
     // Keyboard listeners
     useEffect(() => {
         const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+            console.log('[EditorScreen] Keyboard shown');
             setKeyboardVisible(true);
             if (Platform.OS === 'android') {
                 setKeyboardHeight(e.endCoordinates.height + 50);
             }
         });
         const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            console.log('[EditorScreen] Keyboard hidden');
             setKeyboardVisible(false);
             if (Platform.OS === 'android') {
                 setKeyboardHeight(0);
@@ -123,6 +133,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
         if (title === selectedNote.title && content === selectedNote.content) return;
 
         const timer = setTimeout(() => {
+            console.log('[EditorScreen] Auto-save triggered');
             saveNote();
         }, 1000); // 1 second debounce
 
@@ -132,6 +143,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     // Handle Back Button
     useEffect(() => {
         const backAction = () => {
+            console.log('[EditorScreen] Hardware back press');
             if (selectedNote) {
                 handleBack();
                 return true;
@@ -153,6 +165,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     }, [selectedNote, title, content, selectionMode]);
 
     const loadNotes = async () => {
+        console.log('[EditorScreen] Loading notes');
         const result = await runQuery('SELECT * FROM notes ORDER BY isPinned DESC, updatedAt DESC');
         setNotes(result as Note[]);
     };
@@ -167,6 +180,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     }, [notes, searchQuery]);
 
     const saveNote = async () => {
+        console.log('[EditorScreen] saveNote called');
         if (!selectedNote) return;
         setIsSaving(true);
         try {
@@ -197,6 +211,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const togglePin = async () => {
+        console.log('[EditorScreen] togglePin called');
         if (!selectedNote) return;
         const newPinnedState = selectedNote.isPinned ? 0 : 1;
         const updatedNote = { ...selectedNote, isPinned: newPinnedState };
@@ -218,9 +233,11 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleBack = async () => {
+        console.log('[EditorScreen] handleBack called');
         if (selectedNote) {
             // Force save if pending changes exist
             if (title !== selectedNote.title || content !== selectedNote.content) {
+                console.log('[EditorScreen] Saving pending changes before back');
                 await saveNote();
             }
             setSelectedNote(null);
@@ -230,6 +247,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleDelete = async () => {
+        console.log('[EditorScreen] handleDelete called');
         if (!selectedNote) return;
 
         Alert.alert(
@@ -241,6 +259,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     text: "Delete",
                     style: "destructive",
                     onPress: async () => {
+                        console.log('[EditorScreen] Deleting note:', selectedNote.id);
                         await deleteNote(selectedNote.id);
                         await loadNotes();
                         setSelectedNote(null);
@@ -252,12 +271,14 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const openNote = (note: Note) => {
+        console.log('[EditorScreen] Opening note:', note.id);
         setSelectedNote(note);
         setTitle(note.title);
         setContent(note.content);
     };
 
     const startCreate = (type: 'text' | 'drawing' = 'text') => {
+        console.log('[EditorScreen] Creating new note:', type);
         const newId = Math.random().toString(36).substring(7);
         const newNote: Note = { id: newId, title: '', content: '', updatedAt: Date.now(), type };
         setSelectedNote(newNote);
@@ -266,6 +287,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleLongPress = (id: string) => {
+        console.log('[EditorScreen] handleLongPress:', id);
         if (!selectionMode) {
             setSelectionMode(true);
             const newSet = new Set<string>();
@@ -276,6 +298,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
     const handlePress = (note: Note) => {
         if (selectionMode) {
+            console.log('[EditorScreen] handlePress (selection mode):', note.id);
             const newSet = new Set(selectedIds);
             if (newSet.has(note.id)) {
                 newSet.delete(note.id);
@@ -287,11 +310,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
             }
             setSelectedIds(newSet);
         } else {
+            console.log('[EditorScreen] handlePress (open mode):', note.id);
             openNote(note);
         }
     };
 
     const handleBulkDelete = () => {
+        console.log('[EditorScreen] handleBulkDelete called');
         Alert.alert(
             "Delete Selected",
             `Are you sure you want to delete ${selectedIds.size} notes?`,
@@ -301,6 +326,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     text: "Delete",
                     style: "destructive",
                     onPress: async () => {
+                        console.log('[EditorScreen] Executing bulk delete');
                         for (const id of selectedIds) {
                             await deleteNote(id);
                         }
@@ -315,6 +341,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleBulkPin = async () => {
+        console.log('[EditorScreen] handleBulkPin called');
         const now = Date.now();
 
         // Smart Pin Logic:
@@ -324,11 +351,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
         if (allPinned) {
             // Unpin all
+            console.log('[EditorScreen] Unpinning selected notes');
             for (const id of selectedIds) {
                 await runCommand('UPDATE notes SET isPinned = 0 WHERE id = ?', [id]);
             }
         } else {
             // Pin all
+            console.log('[EditorScreen] Pinning selected notes');
             for (const id of selectedIds) {
                 await runCommand('UPDATE notes SET isPinned = ? WHERE id = ?', [now, id]);
             }
@@ -350,6 +379,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleExport = async (format: 'text' | 'csv' | 'pdf') => {
+        console.log('[EditorScreen] handleExport called:', format);
         if (selectedIds.size === 0) return;
 
         const selectedNotes = notes.filter(n => selectedIds.has(n.id));
@@ -399,14 +429,17 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
             }
 
             if (uri) {
+                console.log('[EditorScreen] Sharing exported file:', uri);
                 await Sharing.shareAsync(uri);
             }
         } catch (e) {
+            console.error('[EditorScreen] Export failed:', e);
             Alert.alert('Export Failed', String(e));
         }
     };
 
     const handleFormat = (type: 'bold' | 'italic' | 'list' | 'link' | 'table') => {
+        console.log('[EditorScreen] handleFormat:', type);
         if (!editorRef.current) return;
 
         switch (type) {
@@ -431,6 +464,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const insertTable = () => {
+        console.log('[EditorScreen] insertTable called');
         const rows = parseInt(tableRows) || 2;
         const cols = parseInt(tableCols) || 2;
 
@@ -454,6 +488,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const insertLink = () => {
+        console.log('[EditorScreen] insertLink called');
         if (linkUrl) {
             const text = linkText || linkUrl;
             const html = `<a href="${linkUrl}">${text}</a>`;
@@ -465,6 +500,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     };
 
     const handleImagePick = async () => {
+        console.log('[EditorScreen] handleImagePick called');
         try {
             const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -482,6 +518,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const asset = result.assets[0];
+                console.log('[EditorScreen] Image picked, size:', asset.fileSize);
                 if (asset.base64) {
                     // Ensure focus before inserting
                     editorRef.current?.format('focus');
@@ -494,11 +531,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                 }
             }
         } catch (e) {
+            console.error('[EditorScreen] Image pick failed:', e);
             Alert.alert("Error", "Image pick failed: " + String(e));
         }
     };
 
     const handleVoiceRecord = async () => {
+        console.log('[EditorScreen] handleVoiceRecord, current recording:', !!recording);
         if (recording) {
             // Stop recording
             setIsRecording(false);
@@ -508,11 +547,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                 setRecording(null);
 
                 if (uri) {
+                    console.log('[EditorScreen] Voice note recorded, URI:', uri);
                     const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
                     const audioHtml = `<br/><audio controls src="data:audio/m4a;base64,${base64}"></audio><br/>`;
                     editorRef.current?.insertHtml(audioHtml);
                 }
             } catch (e) {
+                console.error('[EditorScreen] Failed to stop recording:', e);
                 Alert.alert("Error", "Failed to save voice note: " + String(e));
             }
         } else {
@@ -529,6 +570,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     );
                     setRecording(recording);
                     setIsRecording(true);
+                    console.log('[EditorScreen] Recording started');
                 } else {
                     Alert.alert("Permission Required", "Microphone permission is required to record voice notes.");
                 }
@@ -539,63 +581,36 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
         }
     };
 
-    const handleSignatureOK = (signature: string) => {
-        // signature is a base64 string with data URI prefix
-        const imageHtml = `<img src="${signature}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" /><br/>`;
-        editorRef.current?.insertHtml(imageHtml);
-        // setIsDrawingModalVisible(false);
-    };
 
-    const handleSignatureEmpty = () => {
-        Alert.alert("Empty Drawing", "Please draw something before saving.");
-    };
 
-    const handleSignatureClear = () => {
-        signatureRef.current?.clearSignature();
-        handleDrawingSave(''); // Save empty state immediately
-    };
+    // Refs for callback access without re-rendering
+    const selectedNoteRef = useRef(selectedNote);
+    const titleRef = useRef(title);
 
-    const handleSignatureEnd = () => {
-        signatureRef.current?.readSignature();
-    };
 
-    const handleColorChange = (color: string) => {
-        setPenColor(color);
-        setIsEraser(false);
-        signatureRef.current?.changePenColor(color);
-    };
 
-    const handleWidthChange = (width: number) => {
-        setPenWidth(width);
-        signatureRef.current?.changePenSize(width, width);
-    };
-
-    const handleWidthConfirm = () => {
-        handleWidthChange(tempPenWidth);
-        setIsSizeSliderVisible(false);
-    };
-
-    const handleEraser = () => {
-        setIsEraser(true);
-        // Assuming white background for eraser
-        signatureRef.current?.changePenColor('#ffffff');
-        signatureRef.current?.changePenSize(20, 20); // Eraser is usually thicker
-    };
+    useEffect(() => {
+        selectedNoteRef.current = selectedNote;
+        titleRef.current = title;
+    }, [selectedNote, title]);
 
     // Drawing Note Specific Handlers
+    const handleDrawingSave = useCallback((signature: string) => {
+        console.log('[EditorScreen] handleDrawingSave called, signature length:', signature.length);
+        const currentNote = selectedNoteRef.current;
+        const currentTitle = titleRef.current;
 
-    // Drawing Note Specific Handlers
-    const handleDrawingSave = (signature: string) => {
-        // For drawing notes, the content IS the signature (base64)
+        // Update local state content
         setContent(signature);
+
         // Trigger save immediately
-        if (selectedNote) {
+        if (currentNote) {
             const now = Date.now();
-            const isPinned = selectedNote.isPinned || 0;
+            const isPinned = currentNote.isPinned || 0;
             const type = 'drawing';
-            runCommand('INSERT OR REPLACE INTO notes (id, title, content, updatedAt, isPinned, type) VALUES (?, ?, ?, ?, ?, ?)', [selectedNote.id, title, signature, now, isPinned, type])
+            runCommand('INSERT OR REPLACE INTO notes (id, title, content, updatedAt, isPinned, type) VALUES (?, ?, ?, ?, ?, ?)', [currentNote.id, currentTitle, signature, now, isPinned, type])
                 .then(() => {
-                    const updatedNote: Note = { ...selectedNote, title, content: signature, updatedAt: now, isPinned, type };
+                    const updatedNote: Note = { ...currentNote, title: currentTitle, content: signature, updatedAt: now, isPinned, type };
                     setSelectedNote(updatedNote);
                     setNotes(prev => {
                         const filtered = prev.filter(n => n.id !== updatedNote.id);
@@ -607,7 +622,17 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     onSync(true);
                 });
         }
-    };
+    }, []); // Empty dependency array! Uses refs.
+
+    const handleSignatureClear = useCallback(() => {
+        console.log('[EditorScreen] handleSignatureClear called');
+        drawingRef.current?.clear();
+        handleDrawingSave('');
+    }, [handleDrawingSave]);
+
+
+    // Drawing Note Specific Handlers
+
 
     if (selectedNote) {
         return (
@@ -648,155 +673,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                             onChangeText={setTitle}
                         />
                         <View className="flex-1">
-                            <SignatureScreen
-                                ref={signatureRef}
-                                onOK={handleDrawingSave}
-                                onEmpty={handleSignatureEmpty}
-                                onEnd={handleSignatureEnd}
-                                dataURL={initialDrawing}
-                                descriptionText="Draw"
-                                clearText="Clear"
-                                confirmText="Save"
-                                penColor={penColor}
-                                minWidth={penWidth}
-                                maxWidth={penWidth}
-                                webStyle={`
-                                    .m-signature-pad { box-shadow: none; border: none; } 
-                                    .m-signature-pad--body { border: none; }
-                                    .m-signature-pad--footer { display: none; margin: 0px; }
-                                    body,html { width: 100%; height: 100%; }
-                                `}
+                            <DrawingEditor
+                                ref={drawingRef}
+                                initialContent={initialDrawing}
+                                onSave={handleDrawingSave}
+                                isDarkMode={isDarkMode}
                             />
                         </View>
-
-                        {/* Drawing Toolbar */}
-                        <View className="flex-row justify-between items-center p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 safe-area-pb">
-                            {/* Color Button */}
-                            <TouchableOpacity
-                                onPress={() => setIsColorPickerVisible(true)}
-                                className="w-10 h-10 rounded-full border-2 border-gray-300 dark:border-gray-600 shadow-sm"
-                                style={{ backgroundColor: isEraser ? 'white' : penColor }}
-                            />
-
-                            {/* Width Button */}
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setTempPenWidth(penWidth);
-                                    setIsSizeSliderVisible(true);
-                                }}
-                                className="bg-gray-200 dark:bg-gray-700 px-4 py-2 rounded-lg flex-row items-center gap-2"
-                            >
-                                <View
-                                    className="bg-black dark:bg-white rounded-full"
-                                    style={{ width: penWidth, height: penWidth }}
-                                />
-                                <Text className="text-black dark:text-white font-semibold">Size</Text>
-                            </TouchableOpacity>
-
-                            {/* Eraser */}
-                            <TouchableOpacity
-                                onPress={handleEraser}
-                                className={`p-2 rounded-lg ${isEraser ? 'bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700' : 'bg-gray-200 dark:bg-gray-700'}`}
-                            >
-                                <Text className="text-xl">🧹</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Color Picker Modal */}
-                        <Modal
-                            visible={isColorPickerVisible}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setIsColorPickerVisible(false)}
-                        >
-                            <View className="flex-1 bg-black/50 justify-center items-center p-4">
-                                <View className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-xl relative">
-                                    {/* Close Button - Top Right */}
-                                    <TouchableOpacity
-                                        onPress={() => setIsColorPickerVisible(false)}
-                                        className="absolute top-3 right-3 w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full items-center justify-center z-10"
-                                        style={{ zIndex: 10 }}
-                                    >
-                                        <Text className="text-black dark:text-white text-lg font-bold">×</Text>
-                                    </TouchableOpacity>
-
-                                    <Text className="text-xl font-bold text-black dark:text-white mb-4 text-center pr-8">Select Color</Text>
-
-                                    <View className="w-full mb-4" style={{ height: 340 }}>
-                                        <ColorPicker
-                                            style={{ width: '100%', height: '100%' }}
-                                            value={penColor}
-                                            thumbSize={24}
-                                            onChange={({ hex }) => {
-                                                'worklet';
-                                                runOnJS(handleColorChange)(hex);
-                                            }}
-                                        >
-                                            <Preview style={{ marginBottom: 15 }} />
-                                            <Panel1 style={{ marginBottom: 15 }} />
-                                            <HueSlider style={{ marginBottom: 15 }} />
-                                            <Swatches
-                                                colors={['#000000', '#ffffff', '#ff0000', '#0000ff', '#ffff00']}
-                                            />
-                                        </ColorPicker>
-                                    </View>
-                                </View>
-                            </View>
-                        </Modal>
-
-                        {/* Size Slider Modal */}
-                        <Modal
-                            visible={isSizeSliderVisible}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setIsSizeSliderVisible(false)}
-                        >
-                            <View className="flex-1 bg-black/50 justify-center items-center p-4">
-                                <View className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-sm shadow-xl items-center">
-                                    <Text className="text-xl font-bold text-black dark:text-white mb-6">Brush Size</Text>
-
-                                    {/* Preview */}
-                                    <View className="w-32 h-32 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 justify-center items-center mb-6 overflow-hidden">
-                                        <View
-                                            className="rounded-full"
-                                            style={{
-                                                width: tempPenWidth,
-                                                height: tempPenWidth,
-                                                backgroundColor: penColor
-                                            }}
-                                        />
-                                    </View>
-
-                                    <Slider
-                                        style={{ width: '100%', height: 40 }}
-                                        minimumValue={1}
-                                        maximumValue={50}
-                                        step={1}
-                                        value={tempPenWidth}
-                                        onValueChange={setTempPenWidth}
-                                        minimumTrackTintColor="#2563EB"
-                                        maximumTrackTintColor="#9CA3AF"
-                                        thumbTintColor="#2563EB"
-                                    />
-                                    <Text className="text-gray-500 dark:text-gray-400 mt-2 mb-6">{tempPenWidth}px</Text>
-
-                                    <View className="flex-row gap-3 w-full">
-                                        <TouchableOpacity
-                                            onPress={() => setIsSizeSliderVisible(false)}
-                                            className="flex-1 bg-gray-200 dark:bg-gray-700 p-3 rounded-xl items-center"
-                                        >
-                                            <Text className="text-black dark:text-white font-semibold">Cancel</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            onPress={handleWidthConfirm}
-                                            className="flex-1 bg-blue-600 p-3 rounded-xl items-center"
-                                        >
-                                            <Text className="text-white font-semibold">Set Size</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            </View>
-                        </Modal>
                     </View>
                 ) : (
                     Platform.OS === 'ios' ? (
@@ -883,6 +766,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                 ref={editorRef}
                                 initialContent={content}
                                 onChange={setContent}
+                                onSelectionChange={handleSelectionChange}
                                 isDarkMode={isDarkMode}
                             />
 
@@ -898,17 +782,29 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                     </TouchableOpacity>
                                     {showFormatMenu && (
                                         <View className="absolute bottom-12 left-0 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex-row gap-2 min-w-[200px]">
-                                            <TouchableOpacity onPress={() => handleFormat('bold')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white font-bold text-lg">B</Text>
+                                            <TouchableOpacity
+                                                onPress={() => handleFormat('bold')}
+                                                className={`p-2 rounded ${activeFormats.includes('bold') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
+                                            >
+                                                <Text className={`font-bold text-lg ${activeFormats.includes('bold') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>B</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => handleFormat('italic')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white italic text-lg">I</Text>
+                                            <TouchableOpacity
+                                                onPress={() => handleFormat('italic')}
+                                                className={`p-2 rounded ${activeFormats.includes('italic') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
+                                            >
+                                                <Text className={`italic text-lg ${activeFormats.includes('italic') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>I</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => handleFormat('list')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">•</Text>
+                                            <TouchableOpacity
+                                                onPress={() => handleFormat('list')}
+                                                className={`p-2 rounded ${activeFormats.includes('list') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
+                                            >
+                                                <Text className={`text-lg ${activeFormats.includes('list') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>•</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => handleFormat('link')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">🔗</Text>
+                                            <TouchableOpacity
+                                                onPress={() => handleFormat('link')}
+                                                className={`p-2 rounded ${activeFormats.includes('link') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
+                                            >
+                                                <Text className={`text-lg ${activeFormats.includes('link') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>🔗</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('table')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
                                                 <Text className="text-black dark:text-white text-lg">▦</Text>
@@ -936,7 +832,8 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                             </View>
                         </View>
                     )
-                )}
+                )
+                }
 
                 {/* Table Modal */}
                 <Modal
@@ -1102,17 +999,31 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
                     ItemSeparatorComponent={() => <View className="h-3" />}
                     onDragEnd={async ({ data }) => {
-                        setNotes(data);
-                        const pinnedNotes = data.filter(n => n.isPinned && n.isPinned > 0);
                         const baseTime = Date.now();
+                        const updatedData = [...data];
+                        const dbUpdates: Promise<any>[] = [];
 
-                        for (let i = 0; i < pinnedNotes.length; i++) {
-                            const note = pinnedNotes[i];
-                            const newPinnedTime = baseTime - (i * 1000);
-                            await runCommand('UPDATE notes SET isPinned = ? WHERE id = ?', [newPinnedTime, note.id]);
-                            note.isPinned = newPinnedTime;
+                        let pinnedCount = 0;
+                        updatedData.forEach((note, index) => {
+                            if (note.isPinned && note.isPinned > 0) {
+                                const newPinnedTime = baseTime - (pinnedCount * 1000);
+                                // Create new object to ensure React detects change if needed, 
+                                // though DraggableFlatList's data prop change should be enough.
+                                // Crucially, we update the isPinned value to maintain the sort order logic.
+                                updatedData[index] = { ...note, isPinned: newPinnedTime };
+                                dbUpdates.push(runCommand('UPDATE notes SET isPinned = ? WHERE id = ?', [newPinnedTime, note.id]));
+                                pinnedCount++;
+                            }
+                        });
+
+                        setNotes(updatedData);
+
+                        try {
+                            await Promise.all(dbUpdates);
+                            onSync(true);
+                        } catch (e) {
+                            console.error('Failed to save pinned order:', e);
                         }
-                        onSync(true);
                     }}
                     renderItem={({ item, drag, isActive }: RenderItemParams<Note>) => {
                         const isSelected = selectedIds.has(item.id);
