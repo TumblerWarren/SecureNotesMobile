@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Keyboard, ActivityIndicator, Modal } from 'react-native';
+import { Lock, ShieldAlert } from 'lucide-react-native';
 
 interface Props {
     onSubmit: (password: string) => void;
@@ -80,7 +81,7 @@ export const UnlockScreen: React.FC<Props> = ({ onSubmit, isNew, loading, error,
                 <View className="flex-1 justify-center items-center bg-black/80 p-6">
                     <View className="w-full bg-gray-800 rounded-2xl p-6 items-center border border-red-900/50">
                         <View className="w-16 h-16 rounded-full bg-red-900/30 justify-center items-center mb-4">
-                            <Text className="text-3xl">🔒</Text>
+                            <ShieldAlert size={32} color="#EF4444" />
                         </View>
 
                         <Text className="text-xl font-bold text-white mb-2 text-center">

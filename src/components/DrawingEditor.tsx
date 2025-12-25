@@ -5,6 +5,7 @@ import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas
 import ColorPicker, { Panel1, Swatches, Preview, HueSlider } from 'reanimated-color-picker';
 import Slider from '@react-native-community/slider';
 import { runOnJS } from 'react-native-reanimated';
+import { Eraser, X, Palette, Brush, Check } from 'lucide-react-native';
 
 interface DrawingEditorProps {
     initialContent?: string;
@@ -147,9 +148,13 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
                         setIsColorPickerVisible(true);
                     }}
                     className={`w-10 h-10 rounded-full shadow-sm justify-center items-center ${!isEraser ? 'border-4 border-blue-500 dark:border-blue-400' : 'border-2 border-gray-300 dark:border-gray-600'}`}
-                    style={{ backgroundColor: isEraser ? 'white' : penColor }}
+                    style={{ backgroundColor: isEraser ? (isDarkMode ? '#111827' : 'white') : penColor }}
                 >
-                    {!isEraser && <View className="w-2 h-2 bg-white rounded-full bg-opacity-50" />}
+                    {!isEraser ? (
+                        <Palette size={20} color={isDarkMode ? 'white' : 'black'} style={{ opacity: 0.5 }} />
+                    ) : (
+                        <Palette size={20} color={isDarkMode ? '#6B7280' : '#9CA3AF'} />
+                    )}
                 </TouchableOpacity>
 
                 {/* Size Button */}
@@ -180,7 +185,7 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
                     }}
                     className={`p-2 rounded-lg ${isEraser ? 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-500 dark:border-blue-400' : 'bg-gray-200 dark:bg-gray-700 border-2 border-transparent'}`}
                 >
-                    <Text className="text-xl">🧹</Text>
+                    <Eraser size={24} color={isEraser ? (isDarkMode ? '#60A5FA' : '#2563EB') : (isDarkMode ? '#9CA3AF' : '#6B7280')} />
                 </TouchableOpacity>
             </View>
 
@@ -197,7 +202,7 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
                             onPress={() => setIsColorPickerVisible(false)}
                             className="absolute top-3 right-3 w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full items-center justify-center z-10"
                         >
-                            <Text className="text-black dark:text-white text-lg font-bold">×</Text>
+                            <X size={20} color={isDarkMode ? 'white' : 'black'} />
                         </TouchableOpacity>
 
                         <Text className="text-xl font-bold text-black dark:text-white mb-4 text-center">Select Color</Text>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Keyboard } from 'react-native';
+import { FilePlus } from 'lucide-react-native';
 
 interface Props {
     onSubmit: (name: string) => void;
@@ -38,10 +39,11 @@ export const CreateDbScreen: React.FC<Props> = ({ onSubmit, onCancel }) => {
             />
 
             <TouchableOpacity
-                className="w-full bg-emerald-600 p-4 rounded-xl mb-4 active:bg-emerald-700"
+                className="w-full bg-emerald-600 p-4 rounded-xl mb-4 active:bg-emerald-700 flex-row justify-center items-center"
                 onPress={handleSubmit}
                 disabled={!dbName.trim()}
             >
+                <FilePlus size={20} color="white" style={{ marginRight: 10 }} />
                 <Text className="text-white text-center font-semibold text-lg">
                     Continue
                 </Text>

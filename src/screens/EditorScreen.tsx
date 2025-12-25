@@ -12,6 +12,33 @@ import { Audio } from 'expo-av';
 import { RichEditor, RichEditorRef } from '../components/RichEditor';
 import { runOnJS } from 'react-native-reanimated';
 import { DrawingEditor, DrawingEditorRef } from '../components/DrawingEditor';
+import {
+    Pin,
+    GripVertical,
+    Pencil,
+    FileText,
+    Plus,
+    FileSpreadsheet,
+    File as FilePdf,
+    Trash2,
+    Type,
+    Bold,
+    Italic,
+    List,
+    Link,
+    Table,
+    Camera,
+    Mic,
+    Square,
+    Check,
+    ChevronLeft,
+    Search,
+    RefreshCw,
+    Lock,
+    PinOff,
+    Eraser,
+    X
+} from 'lucide-react-native';
 
 interface Note {
     id: string;
@@ -639,7 +666,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
             <SafeAreaView className="flex-1 bg-white dark:bg-gray-900" edges={['top', 'left', 'right']}>
                 <View className="p-4 flex-row justify-between items-center border-b border-gray-200 dark:border-gray-800">
                     <TouchableOpacity onPress={handleBack} className="flex-row items-center">
-                        <Text className="text-blue-600 dark:text-blue-400 text-lg mr-1">‹</Text>
+                        <ChevronLeft size={24} color={isDarkMode ? '#60A5FA' : '#2563EB'} />
                         <Text className="text-blue-600 dark:text-blue-400 text-lg">Back</Text>
                     </TouchableOpacity >
 
@@ -648,14 +675,21 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                             <Text className="text-gray-500 text-xs">Saving...</Text>
                         )}
                         {selectedNote.type === 'drawing' && (
-                            <TouchableOpacity onPress={handleSignatureClear} className="bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <TouchableOpacity onPress={handleSignatureClear} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                                <Eraser size={16} color={isDarkMode ? '#9CA3AF' : '#6B7280'} style={{ marginRight: 4 }} />
                                 <Text className="text-gray-600 dark:text-gray-400 font-semibold">Clear</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity onPress={handleDelete} className="bg-red-100 dark:bg-red-900/50 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800">
+                        <TouchableOpacity onPress={handleDelete} className="flex-row items-center bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900/50">
+                            <Trash2 size={16} color={isDarkMode ? '#F87171' : '#B91C1C'} style={{ marginRight: 4 }} />
                             <Text className="text-red-600 dark:text-red-400 font-semibold">Delete</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={togglePin} className={`px-3 py-1 rounded-lg border ${selectedNote.isPinned ? 'bg-yellow-100 dark:bg-yellow-900/50 border-yellow-200 dark:border-yellow-800' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                        <TouchableOpacity onPress={togglePin} className={`flex-row items-center px-3 py-1.5 rounded-lg border ${selectedNote.isPinned ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-100 dark:border-yellow-900/50' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                            {selectedNote.isPinned ? (
+                                <PinOff size={16} color={isDarkMode ? '#FBBF24' : '#B45309'} style={{ marginRight: 4 }} />
+                            ) : (
+                                <Pin size={16} color={isDarkMode ? '#9CA3AF' : '#6B7280'} style={{ marginRight: 4 }} />
+                            )}
                             <Text className={`${selectedNote.isPinned ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'} font-semibold`}>
                                 {selectedNote.isPinned ? 'Unpin' : 'Pin'}
                             </Text>
@@ -711,24 +745,24 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                 {/* Format Group */}
                                 <View className="relative">
                                     <TouchableOpacity onPress={() => { setShowFormatMenu(!showFormatMenu); setShowAttachMenu(false); }} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                                        <Text className="text-black dark:text-white text-lg">Aa</Text>
+                                        <Type size={20} color={isDarkMode ? 'white' : 'black'} />
                                     </TouchableOpacity>
                                     {showFormatMenu && (
                                         <View className="absolute bottom-12 left-0 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex-row gap-2 min-w-[200px]">
                                             <TouchableOpacity onPress={() => handleFormat('bold')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white font-bold text-lg">B</Text>
+                                                <Bold size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('italic')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white italic text-lg">I</Text>
+                                                <Italic size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('list')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">•</Text>
+                                                <List size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('link')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">🔗</Text>
+                                                <Link size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('table')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">▦</Text>
+                                                <Table size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -737,15 +771,15 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                 {/* Attach Group */}
                                 <View className="relative">
                                     <TouchableOpacity onPress={() => { setShowAttachMenu(!showAttachMenu); setShowFormatMenu(false); }} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                                        <Text className="text-black dark:text-white text-lg">+</Text>
+                                        <Plus size={20} color={isDarkMode ? 'white' : 'black'} />
                                     </TouchableOpacity>
                                     {showAttachMenu && (
                                         <View className="absolute bottom-12 right-0 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex-row gap-2">
                                             <TouchableOpacity onPress={handleImagePick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                <Text className="text-black dark:text-white text-lg">📷</Text>
+                                                <Camera size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={handleVoiceRecord} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                <Text className="text-black dark:text-white text-lg">{recording ? '⏹️' : '🎤'}</Text>
+                                                {recording ? <Square size={18} color="#EF4444" /> : <Mic size={20} color={isDarkMode ? 'white' : 'black'} />}
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -778,7 +812,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                 {/* Format Group */}
                                 <View className="relative">
                                     <TouchableOpacity onPress={() => { setShowFormatMenu(!showFormatMenu); setShowAttachMenu(false); }} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                                        <Text className="text-black dark:text-white text-lg">Aa</Text>
+                                        <Type size={20} color={isDarkMode ? 'white' : 'black'} />
                                     </TouchableOpacity>
                                     {showFormatMenu && (
                                         <View className="absolute bottom-12 left-0 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex-row gap-2 min-w-[200px]">
@@ -786,28 +820,28 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                                 onPress={() => handleFormat('bold')}
                                                 className={`p-2 rounded ${activeFormats.includes('bold') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
                                             >
-                                                <Text className={`font-bold text-lg ${activeFormats.includes('bold') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>B</Text>
+                                                <Bold size={18} color={activeFormats.includes('bold') ? (isDarkMode ? '#93C5FD' : '#1D4ED8') : (isDarkMode ? 'white' : 'black')} />
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 onPress={() => handleFormat('italic')}
                                                 className={`p-2 rounded ${activeFormats.includes('italic') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
                                             >
-                                                <Text className={`italic text-lg ${activeFormats.includes('italic') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>I</Text>
+                                                <Italic size={18} color={activeFormats.includes('italic') ? (isDarkMode ? '#93C5FD' : '#1D4ED8') : (isDarkMode ? 'white' : 'black')} />
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 onPress={() => handleFormat('list')}
                                                 className={`p-2 rounded ${activeFormats.includes('list') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
                                             >
-                                                <Text className={`text-lg ${activeFormats.includes('list') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>•</Text>
+                                                <List size={18} color={activeFormats.includes('list') ? (isDarkMode ? '#93C5FD' : '#1D4ED8') : (isDarkMode ? 'white' : 'black')} />
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 onPress={() => handleFormat('link')}
                                                 className={`p-2 rounded ${activeFormats.includes('link') ? 'bg-blue-200 dark:bg-blue-900 border-blue-500 border' : 'bg-gray-100 dark:bg-gray-700'}`}
                                             >
-                                                <Text className={`text-lg ${activeFormats.includes('link') ? 'text-blue-700 dark:text-blue-300' : 'text-black dark:text-white'}`}>🔗</Text>
+                                                <Link size={18} color={activeFormats.includes('link') ? (isDarkMode ? '#93C5FD' : '#1D4ED8') : (isDarkMode ? 'white' : 'black')} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={() => handleFormat('table')} className="p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                                                <Text className="text-black dark:text-white text-lg">▦</Text>
+                                                <Table size={18} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -816,15 +850,15 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                 {/* Attach Group */}
                                 <View className="relative">
                                     <TouchableOpacity onPress={() => { setShowAttachMenu(!showAttachMenu); setShowFormatMenu(false); }} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                                        <Text className="text-black dark:text-white text-lg">+</Text>
+                                        <Plus size={20} color={isDarkMode ? 'white' : 'black'} />
                                     </TouchableOpacity>
                                     {showAttachMenu && (
                                         <View className="absolute bottom-12 right-0 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex-row gap-2">
                                             <TouchableOpacity onPress={handleImagePick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                <Text className="text-black dark:text-white text-lg">📷</Text>
+                                                <Camera size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                             <TouchableOpacity onPress={handleVoiceRecord} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                <Text className="text-black dark:text-white text-lg">{recording ? '⏹️' : '🎤'}</Text>
+                                                {recording ? <Square size={18} color="#EF4444" /> : <Mic size={20} color={isDarkMode ? 'white' : 'black'} />}
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -954,10 +988,12 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                         <View className="flex-row gap-4">
                             {!selectionMode && (
                                 <>
-                                    <TouchableOpacity onPress={() => onSync(false)} className="bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                                    <TouchableOpacity onPress={() => onSync(false)} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
+                                        <RefreshCw size={14} color={isDarkMode ? '#60A5FA' : '#2563EB'} style={{ marginRight: 4 }} />
                                         <Text className="text-blue-600 dark:text-blue-400 font-medium">Sync</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity onPress={onLogout} className="bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                                    <TouchableOpacity onPress={onLogout} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
+                                        <Lock size={14} color={isDarkMode ? '#F87171' : '#EF4444'} style={{ marginRight: 4 }} />
                                         <Text className="text-red-600 dark:text-red-400 font-medium">Lock</Text>
                                     </TouchableOpacity>
                                 </>
@@ -975,18 +1011,18 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
                     {/* Search Bar */}
                     {!selectionMode && (
-                        <View className="bg-gray-100 dark:bg-gray-800 rounded-xl p-3 flex-row items-center">
-                            <Text className="text-gray-500 dark:text-gray-400 mr-2">🔍</Text>
+                        <View className="bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-2 flex-row items-center">
+                            <Search size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} style={{ marginRight: 8 }} />
                             <TextInput
-                                className="flex-1 text-black dark:text-white text-base"
+                                className="flex-1 text-black dark:text-white text-base py-1"
                                 placeholder="Search notes..."
                                 placeholderTextColor="#9CA3AF"
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
                             />
                             {searchQuery.length > 0 && (
-                                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                    <Text className="text-gray-500 dark:text-gray-400">✕</Text>
+                                <TouchableOpacity onPress={() => setSearchQuery('')} className="p-1">
+                                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -1060,7 +1096,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                         })()}
                                         <View className="flex-1">
                                             <Text className="text-black dark:text-white font-bold text-lg mb-1" numberOfLines={1}>
-                                                {item.isPinned ? '📌 ' : ''}{item.title || 'Untitled'}
+                                                {item.isPinned ? <Pin size={16} color={isDarkMode ? '#FBBF24' : '#B45309'} style={{ marginRight: 4 }} /> : ''}{item.title || 'Untitled'}
                                             </Text>
                                             <Text className="text-gray-600 dark:text-gray-400 text-base leading-5" numberOfLines={3}>
                                                 {item.type === 'drawing' ? 'Drawing' : (stripHtml(item.content) || 'No content')}
@@ -1068,7 +1104,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                         </View>
                                         {selectionMode ? (
                                             <View className={`w-6 h-6 rounded-full border-2 ml-3 justify-center items-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-400 dark:border-gray-500'}`}>
-                                                {isSelected && <Text className="text-white text-xs">✓</Text>}
+                                                {isSelected && <Check size={14} color="white" />}
                                             </View>
                                         ) : (
                                             item.isPinned ? (
@@ -1077,7 +1113,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                                     className="ml-2 p-2 justify-center items-center"
                                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                 >
-                                                    <Text className="text-gray-400 dark:text-gray-500 text-xl">≡</Text>
+                                                    <GripVertical size={20} color={isDarkMode ? '#6B7280' : '#9CA3AF'} />
                                                 </TouchableOpacity>
                                             ) : null
                                         )}
@@ -1105,14 +1141,14 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                     className="flex-row items-center bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700"
                                 >
                                     <Text className="text-black dark:text-white font-medium mr-2">Drawing</Text>
-                                    <Text className="text-xl">✏️</Text>
+                                    <Pencil size={18} color={isDarkMode ? 'white' : 'black'} />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     onPress={() => { startCreate('text'); setShowFabMenu(false); }}
                                     className="flex-row items-center bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700"
                                 >
                                     <Text className="text-black dark:text-white font-medium mr-2">Text Note</Text>
-                                    <Text className="text-xl">📝</Text>
+                                    <FileText size={18} color={isDarkMode ? 'white' : 'black'} />
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -1120,7 +1156,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                             className={`bg-blue-600 w-16 h-16 rounded-full justify-center items-center shadow-lg border border-blue-400 ${showFabMenu ? 'rotate-45' : ''}`}
                             onPress={() => setShowFabMenu(!showFabMenu)}
                         >
-                            <Text className="text-white text-4xl font-light pb-1" style={{ transform: [{ rotate: showFabMenu ? '45deg' : '0deg' }] }}>+</Text>
+                            <Plus size={32} color="white" style={{ transform: [{ rotate: showFabMenu ? '45deg' : '0deg' }] }} />
                         </TouchableOpacity>
                     </View>
                 )}
@@ -1131,24 +1167,24 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                         style={{ paddingBottom: 16 + insets.bottom }}
                     >
                         <TouchableOpacity onPress={() => handleExport('text')} className="items-center">
-                            <Text className="text-2xl mb-1">📝</Text>
-                            <Text className="text-gray-600 dark:text-gray-300 text-xs">Text</Text>
+                            <FileText size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
+                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">Text</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleExport('csv')} className="items-center">
-                            <Text className="text-2xl mb-1">📊</Text>
-                            <Text className="text-gray-600 dark:text-gray-300 text-xs">CSV</Text>
+                            <FileSpreadsheet size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
+                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">CSV</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleExport('pdf')} className="items-center">
-                            <Text className="text-2xl mb-1">📄</Text>
-                            <Text className="text-gray-600 dark:text-gray-300 text-xs">PDF</Text>
+                            <FilePdf size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
+                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">PDF</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={handleBulkDelete} className="items-center">
-                            <Text className="text-2xl mb-1">🗑️</Text>
-                            <Text className="text-red-600 dark:text-red-400 text-xs">Delete</Text>
+                            <Trash2 size={24} color="#EF4444" />
+                            <Text className="text-red-600 dark:text-red-400 text-xs mt-1">Delete</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={handleBulkPin} className="items-center">
-                            <Text className="text-2xl mb-1">📌</Text>
-                            <Text className="text-gray-600 dark:text-gray-300 text-xs">
+                            <Pin size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
+                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">
                                 {notes.filter(n => selectedIds.has(n.id)).every(n => n.isPinned && n.isPinned > 0) ? 'Unpin' : 'Pin'}
                             </Text>
                         </TouchableOpacity>
