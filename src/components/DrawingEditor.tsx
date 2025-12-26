@@ -5,6 +5,7 @@ import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas
 import ColorPicker, { Panel1, Swatches, Preview, HueSlider } from 'reanimated-color-picker';
 import Slider from '@react-native-community/slider';
 import { runOnJS } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Eraser, X, Palette, Brush, Check } from 'lucide-react-native';
 
 interface DrawingEditorProps {
@@ -27,6 +28,7 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
 }, ref) => {
     // Refs
     const signatureRef = useRef<SignatureViewRef>(null);
+    const insets = useSafeAreaInsets();
 
     // State
     const [penColor, setPenColor] = useState('black');
@@ -94,7 +96,7 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
             signatureRef.current?.changePenSize(brushSize, brushSize);
         } else {
             setIsEraser(true);
-            const eraserColor = isDarkMode ? '#111827' : '#ffffff';
+            const eraserColor = '#ffffff'; // Always white to match forced white canvas
             signatureRef.current?.changePenColor(eraserColor);
             signatureRef.current?.changePenSize(eraserSize, eraserSize);
         }
@@ -119,8 +121,8 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
         .m-signature-pad--body { border: none; }
         .m-signature-pad--footer { display: none; margin: 0px; }
         body,html { width: 100%; height: 100%; }
-        body { background-color: ${isDarkMode ? '#111827' : '#ffffff'}; }
-    `, [isDarkMode]);
+        body { background-color: #ffffff; }
+    `, []);
 
     return (
         <View className="flex-1 bg-white dark:bg-gray-900">
@@ -133,6 +135,7 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
                     onEnd={() => signatureRef.current?.readSignature()}
                     dataURL={initialContent}
                     webStyle={webStyle}
+                    backgroundColor="#ffffff"
                     descriptionText="Draw"
                     clearText="Clear"
                     confirmText="Save"
@@ -140,7 +143,10 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
             </View>
 
             {/* Toolbar */}
-            <View className="flex-row justify-between items-center p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+            <View
+                className="flex-row justify-between items-center p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900"
+                style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+            >
                 {/* Color Button (Brush) */}
                 <TouchableOpacity
                     onPress={() => {
