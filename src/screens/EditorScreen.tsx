@@ -55,9 +55,10 @@ interface Props {
     onSync: (silent?: boolean) => void;
     onLogout: () => void;
     onExport: () => void;
+    isManaged: boolean;
 }
 
-export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport }) => {
+export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isManaged }) => {
     const [notes, setNotes] = useState<Note[]>([]);
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
     const [title, setTitle] = useState('');
@@ -967,14 +968,23 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport }) =>
                         <View className="flex-row gap-4">
                             {!selectionMode && (
                                 <>
-                                    <TouchableOpacity onPress={() => onSync(false)} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
-                                        <RefreshCw size={14} color={isDarkMode ? '#60A5FA' : '#2563EB'} style={{ marginRight: 4 }} />
-                                        <Text className="text-blue-600 dark:text-blue-400 font-medium">Sync</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity onPress={onExport} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
-                                        <Cloud size={14} color={isDarkMode ? '#A78BFA' : '#7C3AED'} style={{ marginRight: 4 }} />
-                                        <Text className="text-purple-600 dark:text-purple-400 font-medium">Backup</Text>
-                                    </TouchableOpacity>
+                                    {isManaged ? (
+                                        <>
+                                            <TouchableOpacity onPress={() => onSync(false)} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
+                                                <RefreshCw size={14} color={isDarkMode ? '#60A5FA' : '#2563EB'} style={{ marginRight: 4 }} />
+                                                <Text className="text-blue-600 dark:text-blue-400 font-medium">Sync</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={onExport} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
+                                                <Cloud size={14} color={isDarkMode ? '#A78BFA' : '#7C3AED'} style={{ marginRight: 4 }} />
+                                                <Text className="text-purple-600 dark:text-purple-400 font-medium">Backup</Text>
+                                            </TouchableOpacity>
+                                        </>
+                                    ) : (
+                                        <TouchableOpacity onPress={() => onSync(false)} className="flex-row items-center bg-purple-100 dark:bg-purple-900/30 px-3 py-1.5 rounded-full">
+                                            <Cloud size={14} color={isDarkMode ? '#A78BFA' : '#7C3AED'} style={{ marginRight: 4 }} />
+                                            <Text className="text-purple-600 dark:text-purple-400 font-medium">Backup to Cloud</Text>
+                                        </TouchableOpacity>
+                                    )}
                                     <TouchableOpacity onPress={onLogout} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
                                         <Lock size={14} color={isDarkMode ? '#F87171' : '#EF4444'} style={{ marginRight: 4 }} />
                                         <Text className="text-red-600 dark:text-red-400 font-medium">Lock</Text>

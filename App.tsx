@@ -31,29 +31,12 @@ export default function App() {
     try {
       await resetDB(); // Clear any previous session
 
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          'application/x-sqlite3',
-          'application/vnd.sqlite3',
-          'application/octet-stream',
-          'public.database'
-        ],
-        copyToCacheDirectory: true, // Download a local copy to ensure read/write access
-      });
+      setLoading(true);
 
-      if (result.canceled) {
+      const uri = await provider.pickFile();
+
+      if (!uri) {
         setLoading(false);
-        return;
-      }
-
-      const asset = result.assets[0];
-      const uri = asset.uri;
-      const fileName = asset.name || '';
-
-      // Secondary check for .db extension
-      if (!fileName.toLowerCase().endsWith('.db')) {
-        setLoading(false);
-        Alert.alert("Invalid File", "Please select a valid SQLite database file (.db)");
         return;
       }
 
@@ -187,9 +170,20 @@ export default function App() {
       if (!silent) setLoading(true);
       try {
         await performSync(masterKey, salt);
+
+        if (!silent && !provider.isManaged()) {
+          Alert.alert(
+            "Sync Successful (Local)",
+            "Your changes are saved to this app session. Since this is a Cloud file, you must use 'Backup' to persist changes back to Google Drive.",
+            [
+              { text: "Got it", style: "cancel" },
+              { text: "Backup to Cloud", onPress: () => handleExport() }
+            ]
+          );
+        }
       } catch (e) {
         console.error(e);
-        if (!silent) alert('Sync failed: ' + e);
+        if (!silent) Alert.alert('Sync failed', String(e));
       } finally {
         if (!silent) setLoading(false);
       }
@@ -291,6 +285,7 @@ export default function App() {
             onSync={handleSync}
             onLogout={handleLogout}
             onExport={handleExport}
+            isManaged={provider.isManaged()}
           />
         )}
       </View>

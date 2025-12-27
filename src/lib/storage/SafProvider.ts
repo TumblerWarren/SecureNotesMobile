@@ -1,64 +1,72 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { IStorageProvider } from './types';
-
-const { StorageAccessFramework } = FileSystem;
+const SecureStorage = require('../../../modules/secure-storage');
 
 export class SafProvider implements IStorageProvider {
-    name = 'Android SAF';
-    private directoryUri: string | null = null;
+    name = 'Secure Cloud Storage';
     private fileUri: string | null = null;
 
+    // With direct URI permission, we don't 'manage' a folder, we manage a persistent file
+    isManaged() {
+        return false; // We want to force "Sync" to just call write(), which now goes to cloud
+    }
+
     async connect(): Promise<void> {
-        // Request permission to a directory (e.g. Google Drive root or specific folder)
-        const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-
-        if (!permissions.granted) {
-            throw new Error('Permission denied');
-        }
-
-        this.directoryUri = permissions.directoryUri;
+        // No-op: we connect per-file now via pickFile
     }
 
     async listFiles(): Promise<{ name: string, uri: string }[]> {
-        if (!this.directoryUri) throw new Error('Not connected');
-
-        const files = await StorageAccessFramework.readDirectoryAsync(this.directoryUri);
-
-        return files.map((uri: string) => ({
-            name: decodeURIComponent(uri.split('/').pop() || 'unknown'),
-            uri
-        }));
+        return []; // Not supported in file-only mode
     }
 
     async selectFile(uri: string) {
-        this.fileUri = uri;
+        this.fileUri = uri; // Set internally but we usually pick via own method
+    }
+
+    // New helper to replace DocumentPicker
+    async pickFile(): Promise<string | null> {
+        const uri = await SecureStorage.pickFile();
+        if (uri) {
+            this.fileUri = uri;
+        }
+        return uri;
     }
 
     async createNewFile(filename: string) {
-        if (!this.directoryUri) throw new Error('Not connected');
-        this.fileUri = await StorageAccessFramework.createFileAsync(this.directoryUri, filename, 'application/octet-stream');
+        const uri = await SecureStorage.createFile(filename);
+        if (uri) {
+            this.fileUri = uri;
+        } else {
+            throw new Error("File creation cancelled");
+        }
     }
 
     async read(): Promise<Uint8Array | null> {
         if (!this.fileUri) return null;
 
-        const content = await FileSystem.readAsStringAsync(this.fileUri, {
-            encoding: FileSystem.EncodingType.Base64
-        });
+        // For reading, we can usually still use expo-file-system if the URI is persistable
+        // OR we might need to add a read method to the native module if permission is strict
+        // Let's try standard FS first, as permissions should be granted by the Intent
+        try {
+            // Use native module to read content:// URIs with persistent permission
+            const content = await SecureStorage.readFile(this.fileUri);
 
-        // Convert Base64 to Uint8Array
-        const binaryString = atob(content);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+            const binaryString = atob(content);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        } catch (e) {
+            console.warn("Read failed:", e);
+            throw e;
         }
-        return bytes;
     }
 
     async write(data: Uint8Array): Promise<void> {
         if (!this.fileUri) throw new Error('No file selected');
 
-        // Convert Uint8Array to Base64
+        // Convert to Base64
         let binary = '';
         const len = data.byteLength;
         for (let i = 0; i < len; i++) {
@@ -66,8 +74,7 @@ export class SafProvider implements IStorageProvider {
         }
         const base64 = btoa(binary);
 
-        await FileSystem.writeAsStringAsync(this.fileUri, base64, {
-            encoding: FileSystem.EncodingType.Base64
-        });
+        // Native Write
+        await SecureStorage.saveFile(this.fileUri, base64);
     }
 }
