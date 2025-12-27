@@ -38,7 +38,8 @@ import {
     Lock,
     PinOff,
     Eraser,
-    X
+    X,
+    Cloud
 } from 'lucide-react-native';
 
 interface Note {
@@ -53,9 +54,10 @@ interface Note {
 interface Props {
     onSync: (silent?: boolean) => void;
     onLogout: () => void;
+    onExport: () => void;
 }
 
-export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
+export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport }) => {
     const [notes, setNotes] = useState<Note[]>([]);
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
     const [title, setTitle] = useState('');
@@ -968,6 +970,10 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                     <TouchableOpacity onPress={() => onSync(false)} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
                                         <RefreshCw size={14} color={isDarkMode ? '#60A5FA' : '#2563EB'} style={{ marginRight: 4 }} />
                                         <Text className="text-blue-600 dark:text-blue-400 font-medium">Sync</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={onExport} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
+                                        <Cloud size={14} color={isDarkMode ? '#A78BFA' : '#7C3AED'} style={{ marginRight: 4 }} />
+                                        <Text className="text-purple-600 dark:text-purple-400 font-medium">Backup</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity onPress={onLogout} className="flex-row items-center bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full">
                                         <Lock size={14} color={isDarkMode ? '#F87171' : '#EF4444'} style={{ marginRight: 4 }} />

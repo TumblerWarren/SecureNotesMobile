@@ -8,6 +8,8 @@ import { EditorScreen } from './src/screens/EditorScreen';
 import { SafProvider } from './src/lib/storage/SafProvider';
 import { initDB, importDB, exportDB, resetDB } from './src/lib/db';
 import { deriveKey, encryptData, decryptData, generateSalt } from './src/lib/crypto';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import './global.css';
 import { CreateDbScreen } from './src/screens/CreateDbScreen';
 
@@ -197,6 +199,46 @@ export default function App() {
     setState('WELCOME');
   };
 
+  const handleExport = async () => {
+    if (masterKey && salt) {
+      setLoading(true);
+      try {
+        const dbData = await exportDB();
+        const encrypted = await encryptData(dbData, masterKey);
+
+        const finalData = new Uint8Array(salt.length + encrypted.length);
+        finalData.set(salt);
+        finalData.set(encrypted, salt.length);
+
+        // Save to cache and share
+        const cacheUri = FileSystem.cacheDirectory + 'secure_notes_backup.db';
+
+        // Convert Uint8Array to Base64 for writing
+        let binary = '';
+        const len = finalData.length;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(finalData[i]);
+        }
+        const base64 = btoa(binary);
+
+        await FileSystem.writeAsStringAsync(cacheUri, base64, {
+          encoding: FileSystem.EncodingType.Base64
+        });
+
+        await Sharing.shareAsync(cacheUri, {
+          mimeType: 'application/octet-stream',
+          dialogTitle: 'Backup Database to Cloud',
+          UTI: 'public.database'
+        });
+      } catch (e) {
+        console.error(e);
+        Alert.alert('Backup Failed', String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
     <SafeAreaProvider>
       <View className="flex-1 bg-gray-900">
@@ -244,6 +286,7 @@ export default function App() {
           <EditorScreen
             onSync={handleSync}
             onLogout={handleLogout}
+            onExport={handleExport}
           />
         )}
       </View>

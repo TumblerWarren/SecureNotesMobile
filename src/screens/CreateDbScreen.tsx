@@ -55,6 +55,12 @@ export const CreateDbScreen: React.FC<Props> = ({ onSubmit, onCancel }) => {
             >
                 <Text className="text-gray-400 text-center">Cancel</Text>
             </TouchableOpacity>
+
+            <View className="mt-8 p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+                <Text className="text-gray-400 text-xs text-center italic">
+                    Note: If cloud storage (like Google Drive) is missing from the folder picker, create your database locally first. You can back it up to the cloud anytime from the editor.
+                </Text>
+            </View>
         </View>
     );
 };
