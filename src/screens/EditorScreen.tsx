@@ -7,7 +7,8 @@ import { runQuery, runCommand, deleteNote } from '../lib/db';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { RichEditor, RichEditorRef } from '../components/RichEditor';
 import { runOnJS } from 'react-native-reanimated';
@@ -28,7 +29,7 @@ import {
     Link,
     Table,
     Camera,
-    Mic,
+    Music,
     Square,
     Check,
     ChevronLeft,
@@ -78,14 +79,6 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
     const [linkText, setLinkText] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
 
-    // Voice Recording State
-    const [recording, setRecording] = useState<Audio.Recording | null>(null);
-    const [isRecording, setIsRecording] = useState(false);
-
-    // Drawing Modal State (for Text notes - unused now but kept for reference if needed, though logic removed)
-    // const [isDrawingModalVisible, setIsDrawingModalVisible] = useState(false);
-    const drawingRef = useRef<DrawingEditorRef>(null);
-
     // Toolbar State
     const [showFormatMenu, setShowFormatMenu] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -95,6 +88,7 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
 
     // Drawing State
     const [initialDrawing, setInitialDrawing] = useState('');
+    const drawingRef = useRef<DrawingEditorRef>(null);
 
     // Text Formatting State
     const [activeFormats, setActiveFormats] = useState<string[]>([]);
@@ -563,48 +557,31 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
         }
     };
 
-    const handleVoiceRecord = async () => {
-        console.log('[EditorScreen] handleVoiceRecord, current recording:', !!recording);
-        if (recording) {
-            // Stop recording
-            setIsRecording(false);
-            try {
-                await recording.stopAndUnloadAsync();
-                const uri = recording.getURI();
-                setRecording(null);
+    const handleAudioPick = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: 'audio/*',
+                copyToCacheDirectory: true
+            });
 
-                if (uri) {
-                    console.log('[EditorScreen] Voice note recorded, URI:', uri);
-                    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-                    const audioHtml = `<br/><audio controls src="data:audio/m4a;base64,${base64}"></audio><br/>`;
+            if (!result.canceled) {
+                const asset = result.assets[0];
+                console.log('[EditorScreen] Audio selected, URI:', asset.uri);
+
+                const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+                const mimeType = asset.mimeType || 'audio/mpeg';
+
+                // Ensure focus before inserting
+                editorRef.current?.format('focus');
+
+                setTimeout(() => {
+                    const audioHtml = `<br/><audio controls src="data:${mimeType};base64,${base64}"></audio><br/>`;
                     editorRef.current?.insertHtml(audioHtml);
-                }
-            } catch (e) {
-                console.error('[EditorScreen] Failed to stop recording:', e);
-                Alert.alert("Error", "Failed to save voice note: " + String(e));
+                }, 100);
             }
-        } else {
-            // Start recording
-            try {
-                const permission = await Audio.requestPermissionsAsync();
-                if (permission.status === 'granted') {
-                    await Audio.setAudioModeAsync({
-                        allowsRecordingIOS: true,
-                        playsInSilentModeIOS: true,
-                    });
-                    const { recording } = await Audio.Recording.createAsync(
-                        Audio.RecordingOptionsPresets.HIGH_QUALITY
-                    );
-                    setRecording(recording);
-                    setIsRecording(true);
-                    console.log('[EditorScreen] Recording started');
-                } else {
-                    Alert.alert("Permission Required", "Microphone permission is required to record voice notes.");
-                }
-            } catch (err) {
-                console.error('Failed to start recording', err);
-                Alert.alert("Error", "Failed to start recording: " + String(err));
-            }
+        } catch (e) {
+            console.error('[EditorScreen] Audio pick failed:', e);
+            Alert.alert("Error", "Audio pick failed: " + String(e));
         }
     };
 
@@ -778,8 +755,8 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                             <TouchableOpacity onPress={handleImagePick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
                                                 <Camera size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={handleVoiceRecord} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                {recording ? <Square size={18} color="#EF4444" /> : <Mic size={20} color={isDarkMode ? 'white' : 'black'} />}
+                                            <TouchableOpacity onPress={handleAudioPick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
+                                                <Music size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -857,8 +834,8 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                                             <TouchableOpacity onPress={handleImagePick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
                                                 <Camera size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={handleVoiceRecord} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
-                                                {recording ? <Square size={18} color="#EF4444" /> : <Mic size={20} color={isDarkMode ? 'white' : 'black'} />}
+                                            <TouchableOpacity onPress={handleAudioPick} className="p-2 bg-gray-100 dark:bg-gray-700 rounded flex-row items-center justify-center w-10 h-10">
+                                                <Music size={20} color={isDarkMode ? 'white' : 'black'} />
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -1029,108 +1006,110 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout }) => {
                     )}
                 </View>
 
-                <DraggableFlatList
-                    data={filteredNotes}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-                    ItemSeparatorComponent={() => <View className="h-3" />}
-                    onDragEnd={async ({ data }) => {
-                        const baseTime = Date.now();
-                        const updatedData = [...data];
-                        const dbUpdates: Promise<any>[] = [];
+                <View className="flex-1">
+                    <DraggableFlatList
+                        data={filteredNotes}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={{ padding: 16, paddingBottom: 150 + insets.bottom }}
+                        ItemSeparatorComponent={() => <View className="h-3" />}
+                        onDragEnd={async ({ data }) => {
+                            const baseTime = Date.now();
+                            const updatedData = [...data];
+                            const dbUpdates: Promise<any>[] = [];
 
-                        let pinnedCount = 0;
-                        updatedData.forEach((note, index) => {
-                            if (note.isPinned && note.isPinned > 0) {
-                                const newPinnedTime = baseTime - (pinnedCount * 1000);
-                                // Create new object to ensure React detects change if needed, 
-                                // though DraggableFlatList's data prop change should be enough.
-                                // Crucially, we update the isPinned value to maintain the sort order logic.
-                                updatedData[index] = { ...note, isPinned: newPinnedTime };
-                                dbUpdates.push(runCommand('UPDATE notes SET isPinned = ? WHERE id = ?', [newPinnedTime, note.id]));
-                                pinnedCount++;
+                            let pinnedCount = 0;
+                            updatedData.forEach((note, index) => {
+                                if (note.isPinned && note.isPinned > 0) {
+                                    const newPinnedTime = baseTime - (pinnedCount * 1000);
+                                    // Create new object to ensure React detects change if needed, 
+                                    // though DraggableFlatList's data prop change should be enough.
+                                    // Crucially, we update the isPinned value to maintain the sort order logic.
+                                    updatedData[index] = { ...note, isPinned: newPinnedTime };
+                                    dbUpdates.push(runCommand('UPDATE notes SET isPinned = ? WHERE id = ?', [newPinnedTime, note.id]));
+                                    pinnedCount++;
+                                }
+                            });
+
+                            setNotes(updatedData);
+
+                            try {
+                                await Promise.all(dbUpdates);
+                                onSync(true);
+                            } catch (e) {
+                                console.error('Failed to save pinned order:', e);
                             }
-                        });
-
-                        setNotes(updatedData);
-
-                        try {
-                            await Promise.all(dbUpdates);
-                            onSync(true);
-                        } catch (e) {
-                            console.error('Failed to save pinned order:', e);
-                        }
-                    }}
-                    renderItem={({ item, drag, isActive }: RenderItemParams<Note>) => {
-                        const isSelected = selectedIds.has(item.id);
-                        return (
-                            <ScaleDecorator>
-                                <TouchableOpacity
-                                    className={`p-4 rounded-xl border ${isSelected ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'} active:bg-gray-100 dark:active:bg-gray-700 shadow-sm ${isActive ? 'opacity-70' : ''}`}
-                                    onPress={() => handlePress(item)}
-                                    onLongPress={() => {
-                                        handleLongPress(item.id);
-                                    }}
-                                    delayLongPress={200}
-                                    disabled={isActive}
-                                >
-                                    <View className="flex-row justify-between items-start">
-                                        {(() => {
-                                            if (item.type === 'drawing') {
-                                                // For drawing notes, the content is the base64 image
-                                                return (
+                        }}
+                        renderItem={({ item, drag, isActive }: RenderItemParams<Note>) => {
+                            const isSelected = selectedIds.has(item.id);
+                            return (
+                                <ScaleDecorator>
+                                    <TouchableOpacity
+                                        className={`p-4 rounded-xl border ${isSelected ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'} active:bg-gray-100 dark:active:bg-gray-700 shadow-sm ${isActive ? 'opacity-70' : ''}`}
+                                        onPress={() => handlePress(item)}
+                                        onLongPress={() => {
+                                            handleLongPress(item.id);
+                                        }}
+                                        delayLongPress={200}
+                                        disabled={isActive}
+                                    >
+                                        <View className="flex-row justify-between items-start">
+                                            {(() => {
+                                                if (item.type === 'drawing') {
+                                                    // For drawing notes, the content is the base64 image
+                                                    return (
+                                                        <Image
+                                                            source={{ uri: item.content }}
+                                                            style={{ width: 60, height: 60, borderRadius: 8, marginRight: 10, backgroundColor: '#f0f0f0' }}
+                                                            resizeMode="contain"
+                                                        />
+                                                    );
+                                                }
+                                                const img = getFirstImage(item.content);
+                                                return img ? (
                                                     <Image
-                                                        source={{ uri: item.content }}
-                                                        style={{ width: 60, height: 60, borderRadius: 8, marginRight: 10, backgroundColor: '#f0f0f0' }}
-                                                        resizeMode="contain"
+                                                        source={{ uri: img }}
+                                                        style={{ width: 60, height: 60, borderRadius: 8, marginRight: 10 }}
                                                     />
-                                                );
-                                            }
-                                            const img = getFirstImage(item.content);
-                                            return img ? (
-                                                <Image
-                                                    source={{ uri: img }}
-                                                    style={{ width: 60, height: 60, borderRadius: 8, marginRight: 10 }}
-                                                />
-                                            ) : null;
-                                        })()}
-                                        <View className="flex-1">
-                                            <Text className="text-black dark:text-white font-bold text-lg mb-1" numberOfLines={1}>
-                                                {item.isPinned ? <Pin size={16} color={isDarkMode ? '#FBBF24' : '#B45309'} style={{ marginRight: 4 }} /> : ''}{item.title || 'Untitled'}
-                                            </Text>
-                                            <Text className="text-gray-600 dark:text-gray-400 text-base leading-5" numberOfLines={3}>
-                                                {item.type === 'drawing' ? 'Drawing' : (stripHtml(item.content) || 'No content')}
-                                            </Text>
-                                        </View>
-                                        {selectionMode ? (
-                                            <View className={`w-6 h-6 rounded-full border-2 ml-3 justify-center items-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-400 dark:border-gray-500'}`}>
-                                                {isSelected && <Check size={14} color="white" />}
+                                                ) : null;
+                                            })()}
+                                            <View className="flex-1">
+                                                <Text className="text-black dark:text-white font-bold text-lg mb-1" numberOfLines={1}>
+                                                    {item.isPinned ? <Pin size={16} color={isDarkMode ? '#FBBF24' : '#B45309'} style={{ marginRight: 4 }} /> : ''}{item.title || 'Untitled'}
+                                                </Text>
+                                                <Text className="text-gray-600 dark:text-gray-400 text-base leading-5" numberOfLines={3}>
+                                                    {item.type === 'drawing' ? 'Drawing' : (stripHtml(item.content) || 'No content')}
+                                                </Text>
                                             </View>
-                                        ) : (
-                                            item.isPinned ? (
-                                                <TouchableOpacity
-                                                    onPressIn={drag}
-                                                    className="ml-2 p-2 justify-center items-center"
-                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                >
-                                                    <GripVertical size={20} color={isDarkMode ? '#6B7280' : '#9CA3AF'} />
-                                                </TouchableOpacity>
-                                            ) : null
-                                        )}
-                                    </View>
-                                    <Text className="text-gray-500 dark:text-gray-600 text-xs mt-3 text-right">
-                                        {new Date(item.updatedAt).toLocaleDateString()} • {new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </Text>
-                                </TouchableOpacity>
-                            </ScaleDecorator>
-                        );
-                    }}
-                    ListEmptyComponent={() => (
-                        <View className="flex-1 justify-center items-center mt-20">
-                            <Text className="text-gray-500 dark:text-gray-600 text-lg">No notes found</Text>
-                        </View>
-                    )}
-                />
+                                            {selectionMode ? (
+                                                <View className={`w-6 h-6 rounded-full border-2 ml-3 justify-center items-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-400 dark:border-gray-500'}`}>
+                                                    {isSelected && <Check size={14} color="white" />}
+                                                </View>
+                                            ) : (
+                                                item.isPinned ? (
+                                                    <TouchableOpacity
+                                                        onPressIn={drag}
+                                                        className="ml-2 p-2 justify-center items-center"
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                    >
+                                                        <GripVertical size={20} color={isDarkMode ? '#6B7280' : '#9CA3AF'} />
+                                                    </TouchableOpacity>
+                                                ) : null
+                                            )}
+                                        </View>
+                                        <Text className="text-gray-500 dark:text-gray-600 text-xs mt-3 text-right">
+                                            {new Date(item.updatedAt).toLocaleDateString()} • {new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </ScaleDecorator>
+                            );
+                        }}
+                        ListEmptyComponent={() => (
+                            <View className="flex-1 justify-center items-center mt-20">
+                                <Text className="text-gray-500 dark:text-gray-600 text-lg">No notes found</Text>
+                            </View>
+                        )}
+                    />
+                </View>
 
                 {!selectionMode && (
                     <View className="absolute right-6" style={{ bottom: 24 + insets.bottom }}>
