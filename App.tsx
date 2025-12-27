@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
-import { View, StatusBar } from 'react-native';
+import { View, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { UnlockScreen } from './src/screens/UnlockScreen';
@@ -30,7 +30,12 @@ export default function App() {
       await resetDB(); // Clear any previous session
 
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Allow all files
+        type: [
+          'application/x-sqlite3',
+          'application/vnd.sqlite3',
+          'application/octet-stream',
+          'public.database'
+        ],
         copyToCacheDirectory: false, // We want the original URI to write back to it
       });
 
@@ -39,7 +44,16 @@ export default function App() {
         return;
       }
 
-      const uri = result.assets[0].uri;
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      const fileName = asset.name || '';
+
+      // Secondary check for .db extension
+      if (!fileName.toLowerCase().endsWith('.db')) {
+        setLoading(false);
+        Alert.alert("Invalid File", "Please select a valid SQLite database file (.db)");
+        return;
+      }
 
       // Select the file in the provider
       await provider.selectFile(uri);
