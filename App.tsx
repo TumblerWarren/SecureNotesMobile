@@ -38,7 +38,7 @@ export default function App() {
           'application/octet-stream',
           'public.database'
         ],
-        copyToCacheDirectory: false, // We want the original URI to write back to it
+        copyToCacheDirectory: true, // Download a local copy to ensure read/write access
       });
 
       if (result.canceled) {
@@ -62,12 +62,16 @@ export default function App() {
 
       // Read and unlock
       const data = await provider.read();
+
       if (data && data.length > 0) {
         setEncryptedData(data);
         setState('UNLOCK');
-      } else {
-        // Empty file? Should not happen for existing, but if so, treat as new
+      } else if (data && data.length === 0) {
+        // Truly empty file picked
         setState('CREATE_PASSWORD');
+      } else {
+        // data is null or undefined (read failed)
+        throw new Error('Could not read file content. The file might be corrupted or inaccessible.');
       }
     } catch (e) {
       console.error(e);

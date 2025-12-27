@@ -42,22 +42,17 @@ export class SafProvider implements IStorageProvider {
     async read(): Promise<Uint8Array | null> {
         if (!this.fileUri) return null;
 
-        try {
-            const content = await FileSystem.readAsStringAsync(this.fileUri, {
-                encoding: FileSystem.EncodingType.Base64
-            });
+        const content = await FileSystem.readAsStringAsync(this.fileUri, {
+            encoding: FileSystem.EncodingType.Base64
+        });
 
-            // Convert Base64 to Uint8Array
-            const binaryString = atob(content);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes;
-        } catch (e) {
-            console.error('Read error:', e);
-            return null;
+        // Convert Base64 to Uint8Array
+        const binaryString = atob(content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
         }
+        return bytes;
     }
 
     async write(data: Uint8Array): Promise<void> {

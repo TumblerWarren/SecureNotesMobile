@@ -218,7 +218,8 @@ export const DrawingEditor = forwardRef<DrawingEditorRef, DrawingEditorProps>(({
                                 style={{ width: '100%', height: '100%' }}
                                 value={penColor}
                                 thumbSize={24}
-                                onChange={({ hex }) => {
+                                onComplete={({ hex }) => {
+                                    'worklet';
                                     runOnJS(handleColorChange)(hex);
                                 }}
                             >
