@@ -402,12 +402,13 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isMa
         return match ? match[1] : null;
     };
 
-    const handleExport = async (format: 'text' | 'csv' | 'pdf') => {
+    const handleExport = async (format: 'text' | 'csv' | 'pdf' | 'excel') => {
         console.log('[EditorScreen] handleExport called:', format);
         if (selectedIds.size === 0) return;
 
         const selectedNotes = notes.filter(n => selectedIds.has(n.id));
         let uri = '';
+        let fileName = `export_${new Date().getTime()}`;
 
         try {
             if (format === 'text') {
@@ -415,14 +416,36 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isMa
                     `Title: ${n.title}\nDate: ${new Date(n.updatedAt).toLocaleString()}\n\n${stripHtml(n.content)}\n\n-------------------\n\n`
                 ).join('');
 
-                const html = `<html><body><pre>${textContent}</pre></body></html>`;
-                const { uri: fileUri } = await Print.printToFileAsync({ html: html });
-                uri = fileUri;
+                uri = `${FileSystem.cacheDirectory}${fileName}.txt`;
+                await FileSystem.writeAsStringAsync(uri, textContent, { encoding: FileSystem.EncodingType.UTF8 });
 
-            } else if (format === 'csv') {
-                const html = `<html><body><pre>${selectedNotes.map(n => `${n.id},${n.title},${stripHtml(n.content).replace(/,/g, ' ')}`).join('\\n')}</pre></body></html>`;
-                const { uri: fileUri } = await Print.printToFileAsync({ html: html });
-                uri = fileUri;
+            } else if (format === 'csv' || format === 'excel') {
+                const XLSX = require('xlsx');
+
+                // Prepare data for Excel/CSV
+                const data = selectedNotes.map(n => ({
+                    ID: n.id,
+                    Title: n.title,
+                    Date: new Date(n.updatedAt).toLocaleString(),
+                    Content: stripHtml(n.content),
+                    Type: n.type || 'text'
+                }));
+
+                const worksheet = XLSX.utils.json_to_sheet(data);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Notes");
+
+                if (format === 'csv') {
+                    const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+                    uri = `${FileSystem.cacheDirectory}${fileName}.csv`;
+                    await FileSystem.writeAsStringAsync(uri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+                } else {
+                    // Excel (.xlsx)
+                    const base64Content = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+                    uri = `${FileSystem.cacheDirectory}${fileName}.xlsx`;
+                    await FileSystem.writeAsStringAsync(uri, base64Content, { encoding: FileSystem.EncodingType.Base64 });
+                }
+
             } else if (format === 'pdf') {
                 const htmlContent = `
                     <html>
@@ -454,7 +477,12 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isMa
 
             if (uri) {
                 console.log('[EditorScreen] Sharing exported file:', uri);
-                await Sharing.shareAsync(uri);
+                await Sharing.shareAsync(uri, {
+                    mimeType: format === 'pdf' ? 'application/pdf' :
+                        format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
+                            format === 'csv' ? 'text/csv' : 'text/plain',
+                    dialogTitle: `Export Notes as ${format.toUpperCase()}`
+                });
             }
         } catch (e) {
             console.error('[EditorScreen] Export failed:', e);
@@ -1165,9 +1193,9 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isMa
                             <FileText size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
                             <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">Text</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleExport('csv')} className="items-center">
+                        <TouchableOpacity onPress={() => handleExport('excel')} className="items-center">
                             <FileSpreadsheet size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
-                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">CSV</Text>
+                            <Text className="text-gray-600 dark:text-gray-300 text-xs mt-1">Excel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleExport('pdf')} className="items-center">
                             <FilePdf size={24} color={isDarkMode ? '#D1D5DB' : '#4B5563'} />
