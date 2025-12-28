@@ -23,8 +23,14 @@ class SecureStorageModule : Module() {
 
       val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
-        type = "application/octet-stream" // Can be specific text/plain or application/x-sqlite3
-        putExtra(Intent.EXTRA_TITLE, "secure_notes.db")
+        type = "*/*"
+        val mimeTypes = arrayOf(
+            "application/x-sqlite3",
+            "application/vnd.sqlite3",
+            "application/octet-stream",
+            "application/x-sqlite"
+        )
+        putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
         // IMPORTANT: Request persistable read/write permissions
         flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or 
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
@@ -40,7 +46,7 @@ class SecureStorageModule : Module() {
 
       val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
-        type = "application/x-sqlite3" // Or application/octet-stream
+        type = "application/octet-stream" 
         putExtra(Intent.EXTRA_TITLE, filename)
         flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or 
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
