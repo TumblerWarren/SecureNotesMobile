@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Expo modules
+modules/secure-storage/android/build/.transforms

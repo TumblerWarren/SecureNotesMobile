@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml:2:13-83
+INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml:2:13-83
+	package
+		INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml
+	xmlns:android
+		ADDED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml:2:23-81
+uses-sdk
+INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml reason: use-sdk injection requested
+INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml
+INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml
+	android:targetSdkVersion
+		INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml
+	android:minSdkVersion
+		INJECTED from F:\Projects\SecureNotesMobile\modules\secure-storage\android\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17642247784477625845.xml
