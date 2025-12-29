@@ -26,6 +26,16 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# Gradle/Android build artifacts
+build/
+bin/
+.gradle/
+.navigation/
+captures/
+*.apk
+*.aar
+*.dex
+
 # macOS
 .DS_Store
 *.pem
