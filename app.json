@@ -4,13 +4,13 @@
     "slug": "SecureNotesMobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/new_icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FE5F55"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FE5F55"
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -49,7 +49,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "8a871b07-9e7c-436c-9e67-f45a248aaca9"
+        "projectId": "7c8db761-3188-4d19-8540-28fabe669924"
       }
     }
   }

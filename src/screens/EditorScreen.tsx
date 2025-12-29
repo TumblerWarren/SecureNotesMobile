@@ -394,7 +394,25 @@ export const EditorScreen: React.FC<Props> = ({ onSync, onLogout, onExport, isMa
     };
 
     const stripHtml = (html: string) => {
-        return html.replace(/<[^>]*>?/gm, '');
+        if (!html) return '';
+
+        let text = html;
+        // Replace block-level closing tags and <br> with newlines
+        text = text.replace(/<\/p>|<\/div>|<\/h[1-6]>|<\/li>/gi, '\n');
+        text = text.replace(/<br\s*\/?>/gi, '\n');
+
+        // Remove all remaining tags
+        text = text.replace(/<[^>]*>?/gm, '');
+
+        // Decode common HTML entities (optional but helpful)
+        text = text.replace(/&nbsp;/g, ' ');
+        text = text.replace(/&amp;/g, '&');
+        text = text.replace(/&lt;/g, '<');
+        text = text.replace(/&gt;/g, '>');
+        text = text.replace(/&quot;/g, '"');
+
+        // Trim and remove excessive newlines (keep up to 2 for spacing)
+        return text.trim().replace(/\n{3,}/g, '\n\n');
     };
 
     const getFirstImage = (html: string) => {
