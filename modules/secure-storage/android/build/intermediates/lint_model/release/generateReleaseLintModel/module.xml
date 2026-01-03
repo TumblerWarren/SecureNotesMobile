@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="F:\Projects\SecureNotesMobile\modules\secure-storage\android"
+    name=":secure-storage"
+    type="LIBRARY"
+    maven="expo.modules.securestorage:secure-storage:1.0.0"
+    agpVersion="8.11.0"
+    buildFolder="build"
+    bootClassPath="E:\Program\android_sdk\platforms\android-34\android.jar;E:\Program\android_sdk\build-tools\35.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-34"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
