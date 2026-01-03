@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "SecureNotesMobile",
+    "name": "SecureNote",
     "slug": "SecureNotesMobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/new_icon.png",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -21,10 +21,36 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.SecureNotesMobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you attach images to your notes.",
+          "cameraPermission": "The app uses your camera to let you take photos for your notes."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "The app uses your microphone to record voice notes."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7c8db761-3188-4d19-8540-28fabe669924"
+      }
     }
   }
 }
