@@ -25,6 +25,9 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     val query = MutableStateFlow("")
     val category = MutableStateFlow("all")
 
+    private val appearance = app.getSharedPreferences("appearance", 0)
+    val sort = MutableStateFlow(appearance.getString("sort", "modified") ?: "modified")
+    val useGrid = MutableStateFlow(appearance.getBoolean("grid", false))
     val folderId = MutableStateFlow<String?>(null)
     val folderBrowsing = MutableStateFlow(false)
 
@@ -344,18 +347,20 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         val type: String,
         val folder: String?,
         val scoped: Boolean,
+        val order: String,
     )
 
     val pages =
-        combine(unlocked, query.debounce(250), category, folderId, folderBrowsing) {
-                open,
-                q,
-                type,
-                folder,
-                scoped ->
-                LibraryScope(open, q, type, folder, scoped)
+        combine(
+                unlocked,
+                query.debounce(250),
+                category,
+                folderId,
+                combine(folderBrowsing, sort) { scoped, order -> scoped to order },
+            ) { open, q, type, folder, scoped ->
+                LibraryScope(open, q, type, folder, scoped.first, scoped.second)
             }
-            .flatMapLatest { (open, q, type, folder, scoped) ->
+            .flatMapLatest { (open, q, type, folder, scoped, order) ->
                 if (!open) flowOf(PagingData.empty())
                 else
                     Pager(
@@ -368,7 +373,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                         ) {
                             val tokens =
                                 q.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(10)
-                            if (tokens.isEmpty()) store.dao.pages(type, folder, scoped)
+                            if (tokens.isEmpty()) store.dao.pages(type, folder, scoped, order)
                             else
                                 store.dao.search(
                                     tokens.joinToString(" AND ") {
@@ -377,6 +382,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                                     type,
                                     folder,
                                     scoped,
+                                    order,
                                 )
                         }
                         .flow
@@ -384,6 +390,10 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
             .cachedIn(viewModelScope)
 
     init {
+        viewModelScope.launch { sort.collect { appearance.edit().putString("sort", it).apply() } }
+        viewModelScope.launch {
+            useGrid.collect { appearance.edit().putBoolean("grid", it).apply() }
+        }
         viewModelScope.launch {
             while (true) {
                 delay(1000)
@@ -401,7 +411,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         lastInteraction = android.os.SystemClock.elapsedRealtime()
     }
 
-    private fun runWork(block: suspend () -> Unit) {
+    private fun runWork(operationName: String = "Operation", block: suspend () -> Unit) {
         if (busy.value) return
         val epoch = generation
         val waitForCleanup = cleanup
@@ -420,7 +430,10 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 if (epoch == generation)
                     message.value =
-                        "Operation failed. Check the password, recovery key, file permissions, or available space."
+                        if (e is IllegalArgumentException)
+                            e.message?.take(160) ?: "$operationName could not be completed."
+                        else
+                            "$operationName could not be completed. Check available space and file access, then try again."
             } finally {
                 if (epoch == generation) {
                     busy.value = false
@@ -501,7 +514,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         var lastUpdate = 0L
         for (uri in list) {
             val id =
-                store.import(uri) { bytes ->
+                store.import(uri, importDestination) { bytes ->
                     val now = android.os.SystemClock.elapsedRealtime()
                     if (now - lastUpdate > 100) {
                         status.value = "Importing ${bytes/1024} KiB"
@@ -509,7 +522,6 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             currentCoroutineContext().ensureActive()
-            store.dao.moveItems(listOf(id), importDestination)
             if (note != null) store.addBlock(note, "attachment", id)
         }
         if (note != null && list.isNotEmpty()) screen.value = note
@@ -548,23 +560,72 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         folderId.value = if (id == null) null else store.dao.folder(id)?.parentId
     }
 
-    fun saveFolder(name: String, existing: VaultFolder? = null, parent: String? = folderId.value) =
-        runWork {
+    fun saveFolder(
+        name: String,
+        existing: VaultFolder? = null,
+        parent: String? = folderId.value,
+        color: Int? = null,
+        onResult: ((String?) -> Unit)? = null,
+    ) =
+        runWork("Save folder") {
             val clean = name.trim()
-            store.dao.saveFolder(
-                VaultFolder(
-                    existing?.id ?: java.util.UUID.randomUUID().toString(),
-                    parent,
-                    clean,
-                    clean.lowercase(java.util.Locale.ROOT),
-                    existing?.color ?: 0,
+            try {
+                store.dao.saveFolder(
+                    VaultFolder(
+                        existing?.id ?: java.util.UUID.randomUUID().toString(),
+                        parent,
+                        clean,
+                        clean.lowercase(java.util.Locale.ROOT),
+                        color ?: existing?.color ?: 0,
+                    )
                 )
-            )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (onResult == null) throw e
+                onResult(
+                    if (e is IllegalArgumentException) e.message
+                    else "Folder could not be saved. Try again."
+                )
+                return@runWork
+            }
+            onResult?.invoke(null)
         }
 
     fun moveFiles(ids: List<String>, destination: String?) = runWork {
         store.dao.moveItems(ids, destination)
     }
+
+    fun groupFiles(ids: List<String>) =
+        runWork("Arrange files") {
+            store.transaction {
+                for (id in ids) {
+                    val item = checkNotNull(store.dao.display(id))
+                    val name =
+                        when {
+                            item.mime == "application/x-securenote" -> "Notes"
+                            item.mime.startsWith("image/") -> "Images"
+                            item.mime.startsWith("video/") -> "Videos"
+                            item.mime.startsWith("audio/") -> "Audio"
+                            item.mime == "application/pdf" -> "PDFs"
+                            isEpubFile(item.mime, item.name) -> "EPUB"
+                            else -> "Other files"
+                        }
+                    val parent = if (folderBrowsing.value) folderId.value else null
+                    val normalized = name.lowercase(java.util.Locale.ROOT)
+                    val folder =
+                        store.dao.sibling(parent, normalized)
+                            ?: VaultFolder(
+                                    java.util.UUID.randomUUID().toString(),
+                                    parent,
+                                    name,
+                                    normalized,
+                                )
+                                .also { store.dao.saveFolder(it) }
+                    store.dao.moveItems(listOf(id), folder.id)
+                }
+            }
+        }
 
     fun removeFolder(id: String) = runWork {
         store.dao.dissolveFolder(id)

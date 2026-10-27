@@ -43,7 +43,7 @@ class FolderRegressionTest {
             val (_, reader) = store.reader(id)
             reader.use {
                 val buffer = java.nio.ByteBuffer.allocate(bytes.size)
-                it.read(buffer)
+                it.read(0L, buffer)
                 assertArrayEquals(bytes, buffer.array())
             }
             before.fill(0)

@@ -614,7 +614,7 @@ private fun ItemScreen(model: VaultModel, id: String) {
                 keyboard?.hide()
                 model.back()
             }) {
-                PaperIcon(PaperGlyph.Back)
+                PaperIcon(PaperGlyph.Back, "Back")
                 Spacer(Modifier.width(4.dp))
             }
             Text(

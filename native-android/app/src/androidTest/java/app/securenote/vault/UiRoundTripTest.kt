@@ -73,7 +73,7 @@ class UiRoundTripTest {
         }
         onView(isAssignableFrom(EditText::class.java))
             .perform(replaceText("Private native note body"))
-        rule.onNodeWithText("Back", substring = false).performClick()
+        rule.onNodeWithContentDescription("Back").performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
         }

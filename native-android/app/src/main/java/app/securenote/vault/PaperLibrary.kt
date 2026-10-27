@@ -83,6 +83,10 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
     val query by model.query.collectAsState()
     val category by model.category.collectAsState()
     val pages = model.pages.collectAsLazyPagingItems()
+    val grid by model.useGrid.collectAsState()
+    val order by model.sort.collectAsState()
+    var sorting by remember { mutableStateOf(false) }
+    var grouping by remember { mutableStateOf(false) }
     val pinned = emptyList<ItemSummary>()
     val browsing by model.folderBrowsing.collectAsState()
     val parent by model.folderId.collectAsState()
@@ -111,7 +115,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
         )
     LazyVerticalGrid(
         columns =
-            if (category in setOf("images", "videos")) GridCells.Adaptive(140.dp)
+            if (grid || category in setOf("images", "videos")) GridCells.Adaptive(140.dp)
             else GridCells.Fixed(1),
         state = state,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
@@ -122,18 +126,37 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
         item(key = "heading", span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
                 if (browsing) FolderPanel(model)
-                Row {
+                FlowRow {
                     TextButton({
                         selecting = !selecting
                         chosen = emptySet()
                     }) {
-                        Text(if (selecting) "Done selecting" else "Select items")
+                        Text(if (selecting) "Done" else "Select")
+                    }
+                    TextButton({ model.useGrid.value = !grid }) {
+                        Text(if (grid) "List view" else "Grid view")
+                    }
+                    Box {
+                        TextButton({ sorting = true }) { Text("Sort") }
+                        DropdownMenu(sorting, { sorting = false }) {
+                            listOf("modified" to "Modified", "name" to "Name", "size" to "Size")
+                                .forEach { (key, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(if (key == order) "✓ $label" else label) },
+                                        onClick = {
+                                            model.sort.value = key
+                                            sorting = false
+                                        },
+                                    )
+                                }
+                        }
                     }
                 }
                 if (chosen.isNotEmpty())
                     Row {
                         Text("${chosen.size} selected", Modifier.weight(1f).padding(12.dp))
                         TextButton({ movingFiles = true }) { Text("Move") }
+                        TextButton({ grouping = true }) { Text("By type") }
                         TextButton({ chosen = emptySet() }) { Text("Clear") }
                     }
 
@@ -327,6 +350,26 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
             }
         }
     }
+    if (grouping)
+        AlertDialog(
+            onDismissRequest = { grouping = false },
+            title = { Text("Arrange ${chosen.size} items by type?") },
+            text = {
+                Text(
+                    "Moves selected items into Notes, Images, Videos, Audio, PDFs, EPUB or Other files folders in the current location. Encrypted files are kept."
+                )
+            },
+            confirmButton = {
+                TextButton({
+                    model.groupFiles(chosen.toList())
+                    chosen = emptySet()
+                    grouping = false
+                }) {
+                    Text("Arrange")
+                }
+            },
+            dismissButton = { TextButton({ grouping = false }) { Text("Cancel") } },
+        )
     if (movingFiles)
         FolderPicker(model, { movingFiles = false }) { destination ->
             model.moveFiles(chosen.toList(), destination)

@@ -477,14 +477,17 @@ internal fun DrawingBlock(
                         },
                     )
                 if (properties) {
-                    Text("Width", style = MaterialTheme.typography.labelSmall)
+                    Text("Width ${thickness.toInt()}", style = MaterialTheme.typography.labelSmall)
                     Slider(
                         thickness,
                         { thickness = it },
                         valueRange = 1f..12f,
                         modifier = Modifier.semantics { contentDescription = "Pen width" },
                     )
-                    Text("Opacity", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Opacity ${(opacity*100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                     Slider(opacity, { opacity = it }, valueRange = 0.1f..1f)
                 }
                 Text(

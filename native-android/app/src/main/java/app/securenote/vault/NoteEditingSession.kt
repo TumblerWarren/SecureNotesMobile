@@ -170,8 +170,19 @@ internal class NoteEditText(context: Context) : SecureEditText(context) {
                     else -> it is UnderlineSpan
                 }
             }
+        val caretSpans =
+            if (start != end) spans
+            else
+                spans.filter { span ->
+                    val a = value.getSpanStart(span)
+                    val b = value.getSpanEnd(span)
+                    val flags = value.getSpanFlags(span)
+                    (a < start && b > start) ||
+                        (a == start && (flags and 0x30) == 0x10) ||
+                        (b == start && (flags and 0x03) == 0x02)
+                }
         val ranges =
-            spans
+            caretSpans
                 .map { value.getSpanStart(it) to value.getSpanEnd(it) }
                 .filter { (a, b) ->
                     if (start == end) a <= start && b >= start else a < end && b > start
@@ -265,6 +276,7 @@ internal class NoteEditText(context: Context) : SecureEditText(context) {
         if (disposed) return
         val start = minOf(selectionStart, selectionEnd).coerceAtLeast(0)
         val end = maxOf(selectionStart, selectionEnd).coerceAtLeast(start)
+        val caretRemove = formatState(kind) == FormatState.On
         edit { value ->
             val bit =
                 when (kind) {
@@ -280,9 +292,7 @@ internal class NoteEditText(context: Context) : SecureEditText(context) {
                 spans.map { value.getSpanStart(it) to value.getSpanEnd(it) }.sortedBy { it.first }
             var covered = start
             for ((a, b) in ranges) if (a <= covered && b > covered) covered = b
-            val remove =
-                if (start == end) ranges.any { (a, b) -> a <= start && b >= start }
-                else covered >= end
+            val remove = if (start == end) caretRemove else covered >= end
             fun span(): Any = if (bit != 0) StyleSpan(bit) else UnderlineSpan()
             for (old in spans) {
                 val a = value.getSpanStart(old)

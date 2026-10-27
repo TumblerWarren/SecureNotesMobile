@@ -169,8 +169,8 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                                         contentPadding = PaddingValues(16.dp),
                                     ) {
                                         PaperIcon(PaperGlyph.Attach)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text("Open encrypted attachment")
+                                        Spacer(Modifier.width(8.dp))
+                                        AttachmentLabel(model, block.content)
                                     }
                                 }
                             else ->
@@ -375,7 +375,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
 }
 
 @Composable
-private fun PaperEditorTool(
+internal fun PaperEditorTool(
     label: String,
     glyph: PaperGlyph? = null,
     letter: String? = null,
@@ -522,6 +522,22 @@ private fun TableBlock(
             ) {
                 Text("Add column")
             }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentLabel(model: VaultModel, id: String) {
+    var item by remember(id) { mutableStateOf<VaultItem?>(null) }
+    LaunchedEffect(id) { model.store.dao.observeDisplay(id).collect { item = it } }
+    Column {
+        Text(item?.name ?: "Attachment", maxLines = 2)
+        item?.let {
+            Text(
+                "${fileKind(it.mime,it.name)} · ${fileSize(it.size)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Paper.Muted,
+            )
         }
     }
 }

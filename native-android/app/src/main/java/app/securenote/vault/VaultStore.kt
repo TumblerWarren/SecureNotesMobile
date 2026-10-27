@@ -176,28 +176,7 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
                                 )
                             }
                         },
-                        object : androidx.room3.migration.Migration(3, 4) {
-                            override suspend fun migrate(connection: SQLiteConnection) {
-                                connection.execSQL(
-                                    "CREATE TABLE IF NOT EXISTS folders (id TEXT NOT NULL PRIMARY KEY,parentId TEXT,name TEXT NOT NULL,normalizedName TEXT NOT NULL,color INTEGER NOT NULL,FOREIGN KEY(parentId) REFERENCES folders(id) ON UPDATE NO ACTION ON DELETE RESTRICT)"
-                                )
-                                connection.execSQL(
-                                    "CREATE INDEX IF NOT EXISTS index_folders_parentId ON folders(parentId)"
-                                )
-                                connection.execSQL(
-                                    "CREATE TABLE IF NOT EXISTS folder_items (itemId TEXT NOT NULL PRIMARY KEY,folderId TEXT NOT NULL,FOREIGN KEY(itemId) REFERENCES items(id) ON UPDATE NO ACTION ON DELETE CASCADE,FOREIGN KEY(folderId) REFERENCES folders(id) ON UPDATE NO ACTION ON DELETE RESTRICT)"
-                                )
-                                connection.execSQL(
-                                    "CREATE INDEX IF NOT EXISTS index_folder_items_folderId ON folder_items(folderId)"
-                                )
-                                connection.execSQL(
-                                    "CREATE TABLE IF NOT EXISTS import_jobs (id TEXT NOT NULL PRIMARY KEY,source TEXT NOT NULL,destination TEXT,completed INTEGER NOT NULL,failed INTEGER NOT NULL)"
-                                )
-                                connection.execSQL(
-                                    "CREATE TABLE IF NOT EXISTS import_entries (jobId TEXT NOT NULL,sourceId TEXT NOT NULL,vaultId TEXT NOT NULL,signature TEXT NOT NULL,PRIMARY KEY(jobId,sourceId),FOREIGN KEY(jobId) REFERENCES import_jobs(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
-                                )
-                            }
-                        },
+                        FolderMigration,
                     )
                     .setQueryCoroutineContext(Dispatchers.IO.limitedParallelism(2))
                     .addCallback(
@@ -239,54 +218,20 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
         }
     }
 
-    suspend fun import(uri: Uri, progress: (Long) -> Unit): String =
+    suspend fun import(uri: Uri, folder: String? = null, progress: (Long) -> Unit): String =
         withContext(Dispatchers.IO) {
-            val s = checkNotNull(session)
-            s.check()
-            var name = "Imported file"
-            context.contentResolver
-                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { c -> if (c.moveToFirst()) name = c.getString(0).take(255) }
+            checkSession()
+            val name =
+                context.contentResolver
+                    .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { c -> if (c.moveToFirst()) c.getString(0)?.take(255) else null }
+                    ?: "Imported file"
             val mime =
-                if (name.endsWith(".epub", ignoreCase = true)) "application/epub+zip"
+                if (name.endsWith(".epub", true)) "application/epub+zip"
                 else context.contentResolver.getType(uri) ?: "application/octet-stream"
-            val key = Crypto.fileKey()
-            var committedId: String? = null
-            try {
-                val pair =
-                    context.contentResolver.openInputStream(uri)!!.use { input ->
-                        objects!!.import(input, key, s) {
-                            ensureActive()
-                            progress(it)
-                        }
-                    }
-                committedId = pair.first
-                // fsync the directory so a committed row cannot outlive the rename after power
-                // loss.
-                val fd = Os.open(File(directory, "objects").path, OsConstants.O_RDONLY, 0)
-                try {
-                    Os.fsync(fd)
-                } finally {
-                    Os.close(fd)
-                }
-                s.check()
-                dao.insert(
-                    VaultItem(
-                        id = pair.first,
-                        name = name,
-                        mime = mime,
-                        size = pair.second,
-                        updated = System.currentTimeMillis(),
-                        fileKey = key,
-                    )
-                )
-                pair.first
-            } catch (e: Exception) {
-                committedId?.let { objects?.delete(it) }
-                throw e
-            } finally {
-                key.fill(0)
-            }
+            val stream =
+                context.contentResolver.openInputStream(uri) ?: error("File permission unavailable")
+            importStream(name, mime, stream, folder, progress)
         }
 
     suspend fun reader(id: String): Pair<VaultItem, EncryptedObjects.Reader> =
@@ -347,6 +292,7 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
         mime: String,
         input: java.io.InputStream,
         folder: String? = null,
+        progress: (Long) -> Unit = {},
         checkpoint: suspend Items.(String) -> Unit = {},
     ): String =
         withContext(Dispatchers.IO) {
@@ -355,7 +301,13 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             val key = Crypto.fileKey()
             var id: String? = null
             try {
-                val (result, length) = input.use { objects!!.import(it, key, s) { ensureActive() } }
+                val (result, length) =
+                    input.use {
+                        objects!!.import(it, key, s) { bytes ->
+                            ensureActive()
+                            progress(bytes)
+                        }
+                    }
                 id = result
                 val fd = Os.open(File(directory, "objects").path, OsConstants.O_RDONLY, 0)
                 try {
