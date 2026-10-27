@@ -1,8 +1,5 @@
 name: Native Android
 on:
-  push:
-    branches: [codex/paper-ui]
-    paths: ['native-android/**', '.github/workflows/native-android.yml']
   pull_request:
     paths: ['native-android/**', '.github/workflows/native-android.yml']
   workflow_dispatch:
@@ -26,6 +23,8 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Install Android build dependencies
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
       - name: Build pinned native Argon2 library
@@ -34,6 +33,9 @@ jobs:
       - name: Compile functional tests
         working-directory: native-android
         run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Release and performance checks
+        working-directory: native-android
+        run: ./gradlew :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -50,9 +52,6 @@ jobs:
           disable-animations: true
           working-directory: native-android
           script: ./gradlew :app:connectedDebugAndroidTest
-      - name: Release and performance checks
-        working-directory: native-android
-        run: ./gradlew :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
       - name: Upload preview and verification reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,3 +63,4 @@ jobs:
             native-android/benchmark/build/outputs/apk/**/*.apk
             native-android/app/build/reports/
             native-android/core/build/reports/
+            native-android/app/schemas/

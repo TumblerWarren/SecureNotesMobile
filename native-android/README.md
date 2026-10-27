@@ -17,7 +17,7 @@ Arbitrary files can be stored. Office document previews, password-protected PDFs
 
 ## Build
 
-Builds are currently paused at the user’s request. The Paper UI, EPUB reader, notes-editor fixes and canvas foundation have only received source-level checks; their updated test sources have not been executed. The commands below are reference procedures for when builds resume.
+Build verification has resumed through GitHub Actions on `codex/paper-ui`. Local Gradle startup is blocked by the execution environment’s socket restrictions. The Paper UI, EPUB reader, notes and canvas changes are awaiting CI compilation and runtime results; see the Native Android workflow for current status.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 
