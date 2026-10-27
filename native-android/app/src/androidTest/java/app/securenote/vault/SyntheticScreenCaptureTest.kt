@@ -133,6 +133,23 @@ class SyntheticScreenCaptureTest {
             }
             if (font > 1.3f) rule.onNodeWithContentDescription("Insert").assertIsDisplayed()
             else rule.onNodeWithText("Insert", substring = false).assertIsDisplayed()
+            rule.runOnIdle {
+                fun editor(view: android.view.View): NoteEditText? {
+                    if (view is NoteEditText) return view
+                    if (view is android.view.ViewGroup)
+                        for (i in 0 until view.childCount) editor(view.getChildAt(i))?.let {
+                            return it
+                        }
+                    return null
+                }
+                val edit = checkNotNull(editor(rule.activity.window.decorView))
+                edit.showSoftInputOnFocus = false
+                edit.requestFocus()
+                edit.setSelection(0, minOf(5, edit.length()))
+                edit.toggle("bold")
+            }
+            if (font > 1.3f) rule.onNodeWithContentDescription("Bold").assertIsSelected()
+            else rule.onNodeWithText("Bold", substring = false).assertIsSelected()
             save(prefix + "-notes")
             rule.runOnIdle { model.navigate(pdf) }
             rule.waitUntil(15000) {
@@ -155,6 +172,7 @@ class SyntheticScreenCaptureTest {
         } finally {
             rule.runOnIdle { visible = false }
             rule.waitForIdle()
+            runBlocking { model.flushWrites() }
             store.close()
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 val owner = androidx.lifecycle.ViewModelStore()
