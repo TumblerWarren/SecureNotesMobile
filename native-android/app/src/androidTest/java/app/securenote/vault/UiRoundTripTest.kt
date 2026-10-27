@@ -103,8 +103,10 @@ class UiRoundTripTest {
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
         rule.onNodeWithText("Unlock", substring = false).performScrollTo().performClick()
         rule.waitUntil(30000) {
-            rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithTag("vault-library").fetchSemanticsNodes().isNotEmpty()
         }
+        // Lazy-grid items can be outside the viewport on compact phones.
+        rule.onNodeWithTag("vault-library").performScrollToNode(hasText("Native round-trip note"))
         rule.onNodeWithText("Native round-trip note").performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithTag("native-note-body").fetchSemanticsNodes().isNotEmpty()

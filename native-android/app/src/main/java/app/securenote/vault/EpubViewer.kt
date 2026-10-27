@@ -40,7 +40,7 @@ import kotlinx.coroutines.withContext
  * Native text and internally resolved images/links only. No WebView, disk cache or external
  * intents.
  */
-internal class EpubTextView(context: Context) : TextView(context, null, 0, R.style.SecureVaultText) {
+internal class EpubTextView(context: Context) : TextView(context) {
     private var displayed: EpubFrame? = null
     private var displayedFont = -1
     private var renderedWidth = -1

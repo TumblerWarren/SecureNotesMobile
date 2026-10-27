@@ -69,6 +69,16 @@ jobs:
           disable-animations: true
           working-directory: native-android
           script: ./gradlew :app:connectedDebugAndroidTest
+      - name: Report device test failures
+        if: always()
+        working-directory: native-android
+        run: |
+          python3 - <<'PYREPORT'
+          import pathlib, xml.etree.ElementTree as ET
+          for report in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              for failure in ET.parse(report).getroot().iter('failure'):
+                  print(failure.text)
+          PYREPORT
       - name: Upload preview and verification reports
         if: always()
         uses: actions/upload-artifact@v4

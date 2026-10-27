@@ -405,6 +405,8 @@ private fun VaultApp(model: VaultModel) {
 
 @Composable
 private fun LockScreen(model: VaultModel, busy: Boolean) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     var recoveryMode by remember { mutableStateOf(false) }
     var secret by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -469,6 +471,8 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
         else password.isNotEmpty()
     Button(
         onClick = {
+            focus.clearFocus()
+            keyboard?.hide()
             val pw = password.toByteArray(Charsets.UTF_8)
             password = ""
             confirmation = ""

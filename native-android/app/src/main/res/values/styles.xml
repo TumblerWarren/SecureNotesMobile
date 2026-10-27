@@ -1,13 +1,11 @@
 <resources>
-    <style name="Theme.SecureNote.Paper" parent="@android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.SecureNote.Paper.Base" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowBackground">#F6F1E7</item>
         <item name="android:colorAccent">#A9513F</item>
         <item name="android:statusBarColor">#F6F1E7</item>
         <item name="android:navigationBarColor">#F6F1E7</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
     </style>
-    <style name="SecureVaultText" parent="@android:style/Widget.TextView" />
-    <style name="SecureVaultEditText" parent="@android:style/Widget.EditText" />
+    <style name="Theme.SecureNote.Paper" parent="Theme.SecureNote.Paper.Base" />
 </resources>

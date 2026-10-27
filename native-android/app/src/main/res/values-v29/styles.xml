@@ -1,9 +1,0 @@
-<resources>
-    <!-- API 29 exposes content-capture exclusion through XML; the public setter needs API 30. -->
-    <style name="SecureVaultText" parent="@android:style/Widget.TextView">
-        <item name="android:importantForContentCapture">noExcludeDescendants</item>
-    </style>
-    <style name="SecureVaultEditText" parent="@android:style/Widget.EditText">
-        <item name="android:importantForContentCapture">noExcludeDescendants</item>
-    </style>
-</resources>
