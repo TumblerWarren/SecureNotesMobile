@@ -130,6 +130,15 @@ interface Items {
 
     @Upsert suspend fun putBlock(block: NoteBlock)
 
+    @Query("UPDATE blocks SET content=:content,searchText=:searchText WHERE id=:id")
+    suspend fun updateBlockText(id: String, content: String, searchText: String)
+
+    @Transaction
+    suspend fun editBlock(block: NoteBlock) {
+        updateBlockText(block.id, block.content, block.searchText)
+        updateNoteIndex(block.noteId, System.currentTimeMillis())
+    }
+
     @Query("DELETE FROM blocks WHERE id=:id") suspend fun deleteBlockRow(id: String)
 
     @Query(

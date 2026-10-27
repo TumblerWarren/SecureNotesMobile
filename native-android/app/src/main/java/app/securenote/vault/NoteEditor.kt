@@ -167,33 +167,36 @@ private fun RichTextBlock(
                 setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(this) }
                 addTextChangedListener(
                     object : TextWatcher {
-                        override fun beforeTextChanged(
-                            s: CharSequence?,
-                            start: Int,
-                            count: Int,
-                            after: Int,
-                        ) {}
+                            override fun beforeTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                count: Int,
+                                after: Int,
+                            ) {}
 
-                        override fun onTextChanged(
-                            s: CharSequence?,
-                            start: Int,
-                            before: Int,
-                            count: Int,
-                        ) {}
+                            override fun onTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                before: Int,
+                                count: Int,
+                            ) {}
 
-                        override fun afterTextChanged(s: Editable?) {
-                            s ?: return
-                            editCallback(
-                                Html.toHtml(s, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE),
-                                s.toString(),
-                            )
+                            override fun afterTextChanged(s: Editable?) {
+                                s ?: return
+                                editCallback(
+                                    Html.toHtml(s, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE),
+                                    s.toString(),
+                                )
+                            }
                         }
-                    }
+                        .also { tag = it }
                 )
             }
         },
         modifier = Modifier.fillMaxWidth().testTag("native-note-body"),
         onRelease = {
+            (it.tag as? TextWatcher)?.let(it::removeTextChangedListener)
+            it.tag = null
             it.text.clear()
             it.setOnFocusChangeListener(null)
         },

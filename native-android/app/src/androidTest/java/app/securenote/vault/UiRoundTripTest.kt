@@ -44,12 +44,23 @@ class UiRoundTripTest {
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
         rule.onNodeWithTag("vault-confirmation").performTextInput("Synthetic UI password 123")
         created = true
-        rule.onNodeWithText("Create vault").performClick()
-        rule.waitUntil(30000) {
-            rule.onAllNodesWithText("Record your recovery key").fetchSemanticsNodes().isNotEmpty()
+        rule.onNodeWithText("Create vault").performScrollTo().performClick()
+        try {
+            rule.waitUntil(30000) {
+                rule
+                    .onAllNodesWithText("Record your recovery key")
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: Exception) {
+            val model = androidx.lifecycle.ViewModelProvider(rule.activity)[VaultModel::class.java]
+            throw AssertionError(
+                "Creation did not reach recovery: lifecycle=${rule.activity.lifecycle.currentState}, focused=${rule.activity.hasWindowFocus()}, open=${model.unlocked.value}, busy=${model.busy.value}, exists=${model.store.exists}, message=${model.message.value}",
+                e,
+            )
         }
-        rule.onNode(isToggleable()).performClick()
-        rule.onNodeWithText("Continue").performClick()
+        rule.onNode(isToggleable()).performScrollTo().performClick()
+        rule.onNodeWithText("Continue").performScrollTo().performClick()
         rule.onNodeWithText("New note").performScrollTo().performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithTag("note-title").fetchSemanticsNodes().isNotEmpty()
@@ -61,9 +72,19 @@ class UiRoundTripTest {
         }
         onView(isAssignableFrom(EditText::class.java))
             .perform(replaceText("Private native note body"))
+        rule.onNodeWithText("Back", substring = false).performClick()
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithText("Native round-trip note").performClick()
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithTag("native-note-body").fetchSemanticsNodes().isNotEmpty()
+        }
+        onView(isAssignableFrom(EditText::class.java))
+            .check(matches(withText(containsString("Private native note body"))))
         rule.onNodeWithText("Lock", substring = false).performClick()
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
-        rule.onNodeWithText("Unlock", substring = false).performClick()
+        rule.onNodeWithText("Unlock", substring = false).performScrollTo().performClick()
         rule.waitUntil(30000) {
             rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
         }

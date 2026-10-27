@@ -96,7 +96,9 @@ class VaultSecurityTest {
                 val file = java.io.File(dir, "$id.svf")
                 java.io.RandomAccessFile(file, "rw").use { f ->
                     f.seek(500)
-                    f.write(19)
+                    val original = f.readUnsignedByte()
+                    f.seek(500)
+                    f.write(original xor 1)
                 }
                 assertFails {
                     objects.open(id, key, s).use { reader ->

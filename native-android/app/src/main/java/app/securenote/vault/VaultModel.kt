@@ -41,13 +41,15 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun renameNote(id: String, title: String) {
+        if (!unlocked.value) return
         val dao = store.dao
         queue("title/$id") { dao.rename(id, title.take(255)) }
     }
 
     fun queueBlock(block: NoteBlock) {
+        if (!unlocked.value) return
         val dao = store.dao
-        queue(block.id) { dao.saveBlock(block) }
+        queue(block.id) { dao.editBlock(block) }
     }
 
     private fun queue(id: String, save: suspend () -> Unit) {

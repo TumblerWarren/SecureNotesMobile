@@ -122,6 +122,10 @@ private fun VaultApp(model: VaultModel) {
         Modifier.fillMaxSize()
             .safeDrawingPadding()
             .imePadding()
+            .then(
+                if (!open || recovery != null) Modifier.verticalScroll(rememberScrollState())
+                else Modifier
+            )
             .semantics { testTagsAsResourceId = true }
             .secureEditing()
             .padding(16.dp),
@@ -311,6 +315,7 @@ private fun ItemScreen(model: VaultModel, id: String) {
     LaunchedEffect(id) {
         try {
             item = model.store.dao.display(id)
+            if (item == null) failed = true
         } catch (e: Exception) {
             failed = true
         }
@@ -347,10 +352,7 @@ private fun ItemScreen(model: VaultModel, id: String) {
         value.mime == "application/pdf" -> PdfViewer(model, id)
         value.mime.startsWith("image/") -> ImageViewer(model, id)
         value.mime.startsWith("text/") -> TextViewer(model, id)
-        else ->
-            Text(
-                "This file is encrypted and stored safely. Internal preview is not supported for this format."
-            )
+        else -> Text("Internal preview is not supported for this file format.")
     }
 }
 

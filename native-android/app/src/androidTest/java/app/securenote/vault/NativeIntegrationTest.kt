@@ -67,7 +67,8 @@ class NativeIntegrationTest {
             store.unlock("Synthetic native reader password".toByteArray())
             val pdf =
                 ByteArrayOutputStream().use { out ->
-                    PdfDocument().use { doc ->
+                    val doc = PdfDocument()
+                    try {
                         val page = doc.startPage(PdfDocument.PageInfo.Builder(200, 300, 1).create())
                         page.canvas.drawColor(Color.WHITE)
                         page.canvas.drawText(
@@ -81,6 +82,8 @@ class NativeIntegrationTest {
                         )
                         doc.finishPage(page)
                         doc.writeTo(out)
+                    } finally {
+                        doc.close()
                     }
                     out.toByteArray()
                 }

@@ -36,6 +36,7 @@ class TiledImageView(
     private val inverseMatrix = Matrix()
     private val visibleRect = RectF()
     private val destinationRect = RectF()
+    private var ready = false
     private var failed = false
     private val version = store.version()
     private val fallbackKey = "image/$id"
@@ -96,6 +97,7 @@ class TiledImageView(
                 }
                 withContext(Dispatchers.Main) {
                     if (!closed.get()) {
+                        ready = true
                         fitImage()
                         invalidate()
                     }
@@ -114,7 +116,7 @@ class TiledImageView(
     }
 
     private fun fitImage() {
-        if (width == 0 || height == 0 || imageWidth == 0) return
+        if (!ready || width == 0 || height == 0 || imageWidth == 0) return
         fit = minOf(width.toFloat() / displayWidth, height.toFloat() / displayHeight)
         scale = fit
         clamp()
@@ -195,7 +197,7 @@ class TiledImageView(
             canvas.drawText("Image preview unavailable", 16f, 60f, paint)
             return
         }
-        if (imageWidth == 0 || width == 0) return
+        if (!ready || imageWidth == 0 || width == 0) return
         val matrix = drawMatrix
         matrix.set(orientation)
         matrix.postScale(scale, scale)
