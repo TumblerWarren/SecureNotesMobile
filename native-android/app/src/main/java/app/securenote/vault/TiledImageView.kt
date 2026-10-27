@@ -30,12 +30,15 @@ class TiledImageView(
     private var fit = 1f
     private var tx = 0f
     private var ty = 0f
+    private val failedTiles = ConcurrentHashMap.newKeySet<String>()
     private val requested = ConcurrentHashMap.newKeySet<String>()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val drawMatrix = Matrix()
     private val inverseMatrix = Matrix()
     private val visibleRect = RectF()
     private val destinationRect = RectF()
+    @Volatile private var viewportRevision = 0L
+    @Volatile private var fallback: Bitmap? = null
     private var ready = false
     private var failed = false
     private val version = store.version()
@@ -93,7 +96,15 @@ class TiledImageView(
                         ) ?: error("Unsupported image")
                     store.checkVersion(version)
                     if (closed.get()) bitmap.recycle()
-                    else cache.putBitmap(fallbackKey, bitmap, version)
+                    else {
+                        try {
+                            cache.putBitmap(fallbackKey, bitmap, version)
+                            fallback = bitmap
+                        } catch (e: Exception) {
+                            bitmap.recycle()
+                            throw e
+                        }
+                    }
                 }
                 withContext(Dispatchers.Main) {
                     if (!closed.get()) {
@@ -110,7 +121,7 @@ class TiledImageView(
                     invalidate()
                 }
             } finally {
-                if (closed.get()) releaseResources()
+                if (closed.get() || failed) releaseResources()
             }
         }
     }
@@ -139,6 +150,7 @@ class TiledImageView(
                     tx = detector.focusX - (detector.focusX - tx) * scale / old
                     ty = detector.focusY - (detector.focusY - ty) * scale / old
                     clamp()
+                    viewportRevision++
                     invalidate()
                     return true
                 }
@@ -159,6 +171,7 @@ class TiledImageView(
                     tx -= dx
                     ty -= dy
                     clamp()
+                    viewportRevision++
                     invalidate()
                     return true
                 }
@@ -172,6 +185,7 @@ class TiledImageView(
                         ty = e.y - (e.y - ty) * scale / old
                         clamp()
                     }
+                    viewportRevision++
                     invalidate()
                     return true
                 }
@@ -185,6 +199,7 @@ class TiledImageView(
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        viewportRevision++
         fitImage()
     }
 
@@ -193,7 +208,11 @@ class TiledImageView(
         if (closed.get()) return
         if (failed) {
             paint.color = android.graphics.Color.WHITE
-            paint.textSize = 36f
+            paint.textSize =
+                min(
+                    18f * resources.displayMetrics.scaledDensity,
+                    (width - 32f).coerceAtLeast(1f) / 14f,
+                )
             canvas.drawText("Image preview unavailable", 16f, 60f, paint)
             return
         }
@@ -208,7 +227,7 @@ class TiledImageView(
         inverseMatrix.mapRect(visible)
         canvas.save()
         canvas.concat(matrix)
-        cache.getBitmap(fallbackKey)?.let {
+        (fallback ?: cache.getBitmap(fallbackKey))?.let {
             destinationRect.set(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat())
             canvas.drawBitmap(it, null, destinationRect, paint)
             canvas.restore()
@@ -221,7 +240,17 @@ class TiledImageView(
                     return
                 }
         var sample = 1
-        while (sample * 2 <= 1f / scale && sample < 128) sample *= 2
+        while (sample * 2 <= 1f / scale && sample < (1 shl 19)) sample *= 2
+        // Keep visible tiles below the cache budget even on large/high-density windows.
+        val visibleWidth =
+            (min(imageWidth.toFloat(), visible.right) - max(0f, visible.left)).coerceAtLeast(0f)
+        val visibleHeight =
+            (min(imageHeight.toFloat(), visible.bottom) - max(0f, visible.top)).coerceAtLeast(0f)
+        while (
+            sample < (1 shl 19) &&
+                (ceil(visibleWidth / (512 * sample)) + 1) *
+                    (ceil(visibleHeight / (512 * sample)) + 1) > 24
+        ) sample *= 2
         val step = 512 * sample
         val left = max(0, visible.left.toInt() / step * step)
         val top = max(0, visible.top.toInt() / step * step)
@@ -241,12 +270,14 @@ class TiledImageView(
                         min(imageHeight, y + step).toFloat(),
                     )
                     canvas.drawBitmap(tile, null, destinationRect, paint)
-                } else if (requested.add(key)) {
+                } else if (requested.size < 8 && key !in failedTiles && requested.add(key)) {
                     val rect = Rect(x, y, min(imageWidth, x + step), min(imageHeight, y + step))
                     val sampling = sample
+                    val revision = viewportRevision
                     scope.launch {
                         try {
                             store.checkVersion(version)
+                            if (revision != viewportRevision) return@launch
                             val bitmap =
                                 synchronized(region) {
                                     if (closed.get()) null
@@ -259,6 +290,7 @@ class TiledImageView(
                                             },
                                         )
                                 }
+                            if (bitmap == null) failedTiles.add(key)
                             if (bitmap != null) {
                                 if (closed.get()) bitmap.recycle()
                                 else {
@@ -271,8 +303,13 @@ class TiledImageView(
                                     }
                                 }
                             }
-                        } catch (e: Exception) {} finally {
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            failedTiles.add(key)
+                        } finally {
                             requested.remove(key)
+                            if (!closed.get()) postInvalidateOnAnimation()
                         }
                     }
                 }
@@ -286,6 +323,7 @@ class TiledImageView(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         scope.cancel()
+        fallback = null
         CoroutineScope(Dispatchers.IO).launch { releaseResources() }
     }
 

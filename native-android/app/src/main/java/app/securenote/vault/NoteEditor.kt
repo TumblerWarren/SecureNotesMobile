@@ -2,144 +2,349 @@ package app.securenote.vault
 
 import android.graphics.Typeface
 import android.text.*
-import android.text.style.StyleSpan
-import android.text.style.UnderlineSpan
-import android.widget.EditText
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
-import org.json.JSONArray
 
-/** Each edit saves one encrypted block, independent of total note/vault size. */
+private data class NoteLinkTarget(
+    val edit: NoteEditText,
+    val start: Int,
+    val end: Int,
+    val revision: Long,
+)
+
+/** Stable block drafts with native text selection and per-block encrypted autosaves. */
 @Composable
 fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
+    val session = remember(item.id) { NoteEditingSession() }
     var ready by remember(item.id) { mutableStateOf(false) }
+    var failure by remember(item.id) { mutableStateOf("") }
     var title by remember(item.id) { mutableStateOf(item.name) }
-    var active by remember { mutableStateOf<EditText?>(null) }
-    var linkDialog by remember { mutableStateOf(false) }
-    var link by remember { mutableStateOf("") }
-    LaunchedEffect(item.id) {
-        model.store.ensureBlocks(item.id)
-        ready = true
+    var active by remember(item.id) { mutableStateOf<NoteEditText?>(null) }
+    var linkTarget by remember(item.id) { mutableStateOf<NoteLinkTarget?>(null) }
+    var link by remember(item.id) { mutableStateOf("") }
+    val busy by model.busy.collectAsState()
+    DisposableEffect(session) {
+        fun clear() {
+            session.close()
+            active = null
+            linkTarget = null
+            link = ""
+            title = ""
+        }
+        val unregister = model.onLock(::clear)
+        onDispose {
+            unregister()
+            clear()
+        }
     }
-    if (!ready) return
+    LaunchedEffect(item.id) {
+        try {
+            // Reopening must not hydrate from a database row older than a pending edit.
+            model.prepareNote(item.id)
+            ready = true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            failure = "This note could not be loaded. Its stored content is unchanged."
+        }
+    }
+    if (failure.isNotEmpty()) {
+        Text(failure, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error)
+        return
+    }
+    if (!ready) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
     val blocks by
         remember(item.id) {
-                model.store.dao.observeBlocks(item.id).catch {
-                    model.message.value = "Note is unavailable."
+                model.observeNoteBlocks(item.id).catch {
+                    failure = "This note could not be loaded. Its stored content is unchanged."
                 }
             }
             .collectAsState(emptyList())
-    OutlinedTextField(
-        title,
-        {
-            title = it
-            model.renameNote(item.id, it)
-        },
-        label = { Text("Title") },
-        modifier = Modifier.fillMaxWidth().testTag("note-title"),
-    )
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        fun style(span: Any) {
-            active?.let { edit ->
-                val start = minOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0)
-                val end = maxOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(start)
-                if (end > start) {
-                    edit.text.setSpan(span, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    edit.text = edit.text
-                    edit.setSelection(end)
+    LaunchedEffect(blocks) { session.retainBlocks(blocks.map { it.id }.toSet()) }
+    fun target(): NoteEditText? = active?.takeIf(session::contains)
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item(key = "title") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BasicTextField(
+                        title,
+                        {
+                            title = it.take(255)
+                            model.renameNote(item.id, title)
+                        },
+                        textStyle = MaterialTheme.typography.headlineLarge.copy(color = Paper.Ink),
+                        cursorBrush = SolidColor(Paper.Accent),
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .secureEditing()
+                                .onFocusChanged { if (it.isFocused) active = null }
+                                .testTag("note-title"),
+                        decorationBox = { field ->
+                            Box {
+                                if (title.isEmpty())
+                                    Text(
+                                        "Untitled",
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        color = Paper.Muted,
+                                    )
+                                field()
+                            }
+                        },
+                    )
+                    Text(
+                        "On this device · ${itemDate(item.updated)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Paper.Muted,
+                    )
+                }
+            }
+            items(blocks, key = { it.id }, contentType = { it.kind }) { block ->
+                Column(Modifier.fillMaxWidth()) {
+                    when (block.kind) {
+                        "table" ->
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = Paper.Surface,
+                                border = BorderStroke(1.dp, Paper.Line),
+                            ) {
+                                Box(Modifier.padding(8.dp)) {
+                                    TableBlock(block, session, { active = null }) { table ->
+                                        session.edited(block.id, table)
+                                        model.queueTable(block, table)
+                                    }
+                                }
+                            }
+                        "drawing" ->
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = Paper.Surface,
+                                border = BorderStroke(1.dp, Paper.Line),
+                            ) {
+                                Column(Modifier.padding(8.dp)) {
+                                    DrawingBlock(block, session) { strokes, aspect, paper ->
+                                        model.queueDrawing(block, strokes, aspect, paper)
+                                    }
+                                }
+                            }
+                        "attachment" ->
+                            Surface(shape = MaterialTheme.shapes.small, color = Paper.Inset) {
+                                TextButton(
+                                    { model.navigate(block.content) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(16.dp),
+                                ) {
+                                    PaperIcon(PaperGlyph.Attach)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Open encrypted attachment")
+                                }
+                            }
+                        else ->
+                            RichTextBlock(
+                                block,
+                                session,
+                                { edit, focused ->
+                                    if (focused) active = edit
+                                    else if (active === edit) active = null
+                                },
+                            ) { snapshot ->
+                                session.edited(block.id, snapshot)
+                                model.queueRichText(block, snapshot)
+                            }
+                    }
+                    var options by remember(block.id) { mutableStateOf(false) }
+                    Box(Modifier.align(Alignment.End)) {
+                        IconButton(
+                            { options = true },
+                            enabled = !busy,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            PaperIcon(PaperGlyph.More, "Block options", color = Paper.Muted)
+                        }
+                        DropdownMenu(options, { options = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Move up") },
+                                onClick = {
+                                    options = false
+                                    model.moveBlock(block, -1)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Move down") },
+                                onClick = {
+                                    options = false
+                                    model.moveBlock(block, 1)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text("Remove block", color = MaterialTheme.colorScheme.error)
+                                },
+                                onClick = {
+                                    options = false
+                                    model.removeBlock(block)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            item(key = "paragraph") {
+                TextButton({ model.addBlock(item.id, "text") }, enabled = !busy) {
+                    PaperIcon(PaperGlyph.Add)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add paragraph")
                 }
             }
         }
-        TextButton({ style(StyleSpan(Typeface.BOLD)) }) { Text("Bold") }
-        TextButton({ style(StyleSpan(Typeface.ITALIC)) }) { Text("Italic") }
-        TextButton({ style(UnderlineSpan()) }) { Text("Underline") }
-        TextButton({ active?.let { it.text.insert(it.selectionStart.coerceAtLeast(0), "\n• ") } }) {
-            Text("List")
+        HorizontalDivider(color = Paper.Line)
+        Row(
+            Modifier.fillMaxWidth()
+                .background(Paper.Surface)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PaperEditorTool("Bold", letter = "B", enabled = target() != null) {
+                target()?.toggle("bold")
+            }
+            PaperEditorTool("Italic", letter = "I", enabled = target() != null) {
+                target()?.toggle("italic")
+            }
+            PaperEditorTool("List", PaperGlyph.List, enabled = target() != null) {
+                target()?.bullets()
+            }
+            PaperEditorTool("Table", PaperGlyph.Table, enabled = !busy) {
+                model.addBlock(item.id, "table", "[[\"\",\"\"],[\"\",\"\"]]")
+            }
+            PaperEditorTool("Draw", PaperGlyph.Draw, enabled = !busy) {
+                model.addBlock(item.id, "drawing", "[]")
+            }
+            PaperEditorTool("Attach", PaperGlyph.Attach, enabled = !busy) {
+                model.beginAttachment(item.id)
+            }
+            PaperEditorTool("Underline", letter = "U", enabled = target() != null) {
+                target()?.toggle("underline")
+            }
+            PaperEditorTool("Link", PaperGlyph.Link, enabled = target() != null) {
+                target()?.let { edit ->
+                    linkTarget =
+                        NoteLinkTarget(
+                            edit,
+                            minOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
+                            maxOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
+                            edit.revision,
+                        )
+                }
+            }
         }
-        TextButton({ linkDialog = true }) { Text("Link") }
-        TextButton({ model.addBlock(item.id, "text") }) { Text("Paragraph") }
-        TextButton({ model.addBlock(item.id, "table", "[[\"\",\"\"],[\"\",\"\"]]") }) {
-            Text("Table")
-        }
-        TextButton({ model.addBlock(item.id, "drawing", "[]") }) { Text("Drawing") }
-        TextButton({ model.beginAttachment(item.id) }) { Text("Attach file") }
     }
-    if (linkDialog)
+    linkTarget?.let { selected ->
         AlertDialog(
-            onDismissRequest = { linkDialog = false },
-            title = { Text("Add link") },
-            text = { OutlinedTextField(link, { link = it }, label = { Text("https://…") }) },
+            modifier = Modifier.secureEditing(),
+            onDismissRequest = {
+                linkTarget = null
+                link = ""
+            },
+            title = { Text("Add a link") },
+            text = {
+                OutlinedTextField(
+                    link,
+                    { link = it },
+                    label = { Text("https://…") },
+                    singleLine = true,
+                )
+            },
             confirmButton = {
-                TextButton({
-                    val safe = runCatching { android.net.Uri.parse(link) }.getOrNull()
-                    if (safe?.scheme in listOf("https", "http"))
-                        active?.let { edit ->
-                            val start = edit.selectionStart.coerceAtLeast(0)
-                            edit.text.insert(start, link)
-                            edit.text.setSpan(
-                                android.text.style.URLSpan(link),
-                                start,
-                                start + link.length,
-                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                            )
-                            edit.text = edit.text
-                        }
-                    link = ""
-                    linkDialog = false
-                }) {
+                TextButton(
+                    {
+                        if (
+                            !session.contains(selected.edit) ||
+                                !selected.edit.link(
+                                    link.trim(),
+                                    selected.start,
+                                    selected.end,
+                                    selected.revision,
+                                )
+                        )
+                            model.message.value = "Select the text again before adding a link."
+                        link = ""
+                        linkTarget = null
+                    },
+                    enabled = NoteEditingSession.safeLink(link.trim()),
+                ) {
                     Text("Insert")
                 }
             },
-            dismissButton = { TextButton({ linkDialog = false }) { Text("Cancel") } },
-        )
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        items(blocks, key = { it.id }) { block ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(8.dp)) {
-                    when (block.kind) {
-                        "table" ->
-                            TableBlock(block) { content, plain ->
-                                model.queueBlock(block.copy(content = content, searchText = plain))
-                            }
-                        "drawing" ->
-                            DrawingBlock(block) { model.queueBlock(block.copy(content = it)) }
-                        "attachment" ->
-                            TextButton({ model.navigate(block.content) }) {
-                                Text("Open encrypted attachment")
-                            }
-                        else ->
-                            RichTextBlock(block, { active = it }) { html, plain ->
-                                model.queueBlock(block.copy(content = html, searchText = plain))
-                            }
-                    }
-                    Row {
-                        TextButton({ model.moveBlock(block, -1) }) { Text("Move up") }
-                        TextButton({ model.moveBlock(block, 1) }) { Text("Move down") }
-                        TextButton({ model.removeBlock(block) }) { Text("Remove block") }
-                    }
+            dismissButton = {
+                TextButton({
+                    link = ""
+                    linkTarget = null
+                }) {
+                    Text("Cancel")
                 }
-            }
+            },
+        )
+    }
+}
+
+@Composable
+private fun PaperEditorTool(
+    label: String,
+    glyph: PaperGlyph? = null,
+    letter: String? = null,
+    enabled: Boolean = true,
+    action: () -> Unit,
+) {
+    TextButton(
+        action,
+        enabled = enabled,
+        modifier = Modifier.widthIn(min = 54.dp),
+        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (glyph != null) PaperIcon(glyph, color = Paper.Ink)
+            else
+                Text(
+                    letter.orEmpty(),
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontStyle =
+                        if (label == "Italic") androidx.compose.ui.text.font.FontStyle.Italic
+                        else androidx.compose.ui.text.font.FontStyle.Normal,
+                    fontWeight =
+                        if (label == "Bold") androidx.compose.ui.text.font.FontWeight.Bold
+                        else androidx.compose.ui.text.font.FontWeight.Normal,
+                    color = Paper.Ink,
+                )
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Paper.Muted)
         }
     }
 }
@@ -147,262 +352,96 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
 @Composable
 private fun RichTextBlock(
     block: NoteBlock,
-    focus: (EditText) -> Unit,
-    onEdit: (String, String) -> Unit,
+    session: NoteEditingSession,
+    focus: (NoteEditText, Boolean) -> Unit,
+    onEdit: (SpannedString) -> Unit,
 ) {
     val editCallback by rememberUpdatedState(onEdit)
+    val focusCallback by rememberUpdatedState(focus)
+    val initial = remember(block.id) { runCatching { session.text(block) } }
+    if (initial.isFailure) {
+        Text(
+            "This paragraph could not be edited. Its stored content is unchanged.",
+            color = MaterialTheme.colorScheme.error,
+        )
+        return
+    }
     AndroidView(
         factory = { context ->
-            SecureEditText(context).apply {
-                setText(Html.fromHtml(block.content, Html.FROM_HTML_MODE_LEGACY))
-                setTextColor(android.graphics.Color.WHITE)
-                setHintTextColor(android.graphics.Color.GRAY)
+            NoteEditText(context).apply {
+                load(initial.getOrThrow())
+                setTextColor(android.graphics.Color.rgb(39, 43, 40))
+                setHintTextColor(android.graphics.Color.rgb(115, 110, 101))
                 hint = "Write a note…"
                 minLines = 2
-                maxLines = 16
+                maxLines = 24
                 textSize = 18f
+                typeface = Typeface.create("serif", Typeface.NORMAL)
+                setLineSpacing(5f * resources.displayMetrics.density, 1f)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setPadding(0, 8, 0, 8)
+                highlightColor = android.graphics.Color.rgb(243, 223, 213)
                 setSelectAllOnFocus(false)
-                restrictExternalActions()
-                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
-                setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(this) }
-                addTextChangedListener(
-                    object : TextWatcher {
-                            override fun beforeTextChanged(
-                                s: CharSequence?,
-                                start: Int,
-                                count: Int,
-                                after: Int,
-                            ) {}
-
-                            override fun onTextChanged(
-                                s: CharSequence?,
-                                start: Int,
-                                before: Int,
-                                count: Int,
-                            ) {}
-
-                            override fun afterTextChanged(s: Editable?) {
-                                s ?: return
-                                editCallback(
-                                    Html.toHtml(s, Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE),
-                                    s.toString(),
-                                )
-                            }
-                        }
-                        .also { tag = it }
-                )
+                this.onEdit = { editCallback(it) }
+                this.onActive = { focusCallback(it, true) }
+                session.attach(this)
             }
         },
         modifier = Modifier.fillMaxWidth().testTag("native-note-body"),
         onRelease = {
-            (it.tag as? TextWatcher)?.let(it::removeTextChangedListener)
-            it.tag = null
-            it.text.clear()
-            it.setOnFocusChangeListener(null)
+            focusCallback(it, false)
+            session.release(it)
         },
     )
 }
 
 @Composable
-private fun TableBlock(block: NoteBlock, onEdit: (String, String) -> Unit) {
-    var rows by
-        remember(block.id) {
-            mutableStateOf(
-                runCatching { JSONArray(block.content) }
-                    .getOrElse { JSONArray("[[\"\",\"\"],[\"\",\"\"]]") }
-            )
-        }
-    fun update(next: JSONArray) {
-        rows = next
-        val text = buildString {
-            for (i in 0 until next.length()) {
-                val row = next.getJSONArray(i)
-                for (j in 0 until row.length()) append(row.optString(j)).append(' ')
-            }
-        }
-        onEdit(next.toString(), text)
+private fun TableBlock(
+    block: NoteBlock,
+    session: NoteEditingSession,
+    onFocus: () -> Unit,
+    onEdit: (NoteTable) -> Unit,
+) {
+    val decoded = remember(block.id) { runCatching { session.table(block) } }
+    if (decoded.isFailure) {
+        Text(
+            "This table could not be edited. Its stored content is unchanged.",
+            color = MaterialTheme.colorScheme.error,
+        )
+        return
+    }
+    var table by remember(block.id) { mutableStateOf(decoded.getOrThrow()) }
+    fun update(next: NoteTable) {
+        table = next
+        onEdit(next)
     }
     Column(Modifier.horizontalScroll(rememberScrollState())) {
-        for (rowIndex in 0 until rows.length()) Row {
-            val row = rows.getJSONArray(rowIndex)
-            for (col in 0 until row.length()) OutlinedTextField(
-                row.optString(col),
-                { value ->
-                    val next = JSONArray(rows.toString())
-                    next.getJSONArray(rowIndex).put(col, value)
-                    update(next)
-                },
-                modifier = Modifier.width(150.dp),
-                singleLine = false,
-            )
+        table.rows.forEachIndexed { rowIndex, row ->
+            Row {
+                row.forEachIndexed { col, value ->
+                    OutlinedTextField(
+                        value,
+                        { update(table.cell(rowIndex, col, it)) },
+                        modifier =
+                            Modifier.width(150.dp).secureEditing().onFocusChanged {
+                                if (it.isFocused) onFocus()
+                            },
+                        label = { Text("${rowIndex + 1}, ${col + 1}") },
+                        singleLine = false,
+                    )
+                }
+            }
         }
         Row {
-            TextButton({
-                if (rows.length() < 20) {
-                    val next = JSONArray(rows.toString())
-                    val row = JSONArray()
-                    repeat(if (next.length() > 0) next.getJSONArray(0).length() else 2) {
-                        row.put("")
-                    }
-                    next.put(row)
-                    update(next)
-                }
-            }) {
+            TextButton({ update(table.addRow()) }, enabled = table.rows.size < NoteTable.MAX_ROWS) {
                 Text("Add row")
             }
-            TextButton({
-                if (rows.length() > 0 && rows.getJSONArray(0).length() < 12) {
-                    val next = JSONArray(rows.toString())
-                    repeat(next.length()) { next.getJSONArray(it).put("") }
-                    update(next)
-                }
-            }) {
+            TextButton(
+                { update(table.addColumn()) },
+                enabled = table.columns < NoteTable.MAX_COLUMNS,
+            ) {
                 Text("Add column")
             }
         }
-    }
-}
-
-private data class InkStroke(
-    val points: List<Offset>,
-    val color: Int = android.graphics.Color.BLACK,
-    val width: Float = 4f,
-)
-
-@Composable
-private fun DrawingBlock(block: NoteBlock, onEdit: (String) -> Unit) {
-    fun decode(value: String): List<InkStroke> = runCatching {
-        val data = JSONArray(value)
-        List(data.length()) { i ->
-            val obj = data.optJSONObject(i)
-            val points = obj?.getJSONArray("points") ?: data.getJSONArray(i)
-            InkStroke(
-                List(points.length()) { j ->
-                    val xy = points.getJSONArray(j)
-                    Offset(xy.getDouble(0).toFloat(), xy.getDouble(1).toFloat())
-                },
-                obj?.optInt("color", android.graphics.Color.BLACK) ?: android.graphics.Color.BLACK,
-                obj?.optDouble("width", 4.0)?.toFloat() ?: 4f,
-            )
-        }
-    }
-        .getOrDefault(emptyList())
-    var strokes by remember(block.id) { mutableStateOf(decode(block.content)) }
-    var current by remember { mutableStateOf(emptyList<Offset>()) }
-    var color by remember { mutableIntStateOf(android.graphics.Color.BLACK) }
-    var thickness by remember { mutableFloatStateOf(4f) }
-    var erasing by remember { mutableStateOf(false) }
-    var dimensions by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val saveCallback by rememberUpdatedState(onEdit)
-    fun save() {
-        val array = JSONArray()
-        strokes.forEach { stroke ->
-            val points = JSONArray()
-            stroke.points.forEach {
-                points.put(JSONArray().put(it.x.toDouble()).put(it.y.toDouble()))
-            }
-            array.put(
-                org.json
-                    .JSONObject()
-                    .put("points", points)
-                    .put("color", stroke.color)
-                    .put("width", stroke.width.toDouble())
-            )
-        }
-        saveCallback(array.toString())
-    }
-    fun path(points: List<Offset>): androidx.compose.ui.graphics.Path =
-        androidx.compose.ui.graphics.Path().apply {
-            points.firstOrNull()?.let { moveTo(it.x * dimensions.width, it.y * dimensions.height) }
-            for (i in 1 until points.size) lineTo(
-                points[i].x * dimensions.width,
-                points[i].y * dimensions.height,
-            )
-        }
-    val paths = remember(strokes, dimensions) { strokes.map { path(it.points) } }
-    val currentPath = remember(current, dimensions) { path(current) }
-    fun erase(point: Offset) {
-        strokes = strokes.filterNot { stroke ->
-            stroke.points.any { p -> (p - point).getDistanceSquared() < 0.0016f }
-        }
-    }
-    Row(Modifier.horizontalScroll(rememberScrollState())) {
-        listOf(
-                android.graphics.Color.BLACK,
-                android.graphics.Color.RED,
-                android.graphics.Color.BLUE,
-                android.graphics.Color.rgb(0, 130, 80),
-            )
-            .forEach { value ->
-                TextButton({
-                    color = value
-                    erasing = false
-                }) {
-                    Text("●", color = Color(value))
-                }
-            }
-        TextButton({ erasing = !erasing }) { Text(if (erasing) "Eraser on" else "Eraser") }
-        TextButton({
-            if (strokes.isNotEmpty()) {
-                strokes = strokes.dropLast(1)
-                save()
-            }
-        }) {
-            Text("Undo")
-        }
-        TextButton({
-            strokes = emptyList()
-            save()
-        }) {
-            Text("Clear")
-        }
-    }
-    Slider(thickness, { thickness = it }, valueRange = 1f..12f)
-    Canvas(
-        Modifier.fillMaxWidth()
-            .height(240.dp)
-            .background(Color.White)
-            .onSizeChanged { dimensions = it }
-            .pointerInput(block.id, erasing, color, thickness) {
-                detectDragGestures(
-                    onDragStart = { p ->
-                        val point = Offset(p.x / size.width, p.y / size.height)
-                        if (erasing) erase(point) else current = listOf(point)
-                    },
-                    onDragEnd = {
-                        if (!erasing && strokes.sumOf { it.points.size } < 50000)
-                            strokes = strokes + InkStroke(current, color, thickness)
-                        current = emptyList()
-                        save()
-                    },
-                    onDragCancel = { current = emptyList() },
-                ) { change, _ ->
-                    change.consume()
-                    val point =
-                        Offset(
-                            (change.position.x / size.width).coerceIn(0f, 1f),
-                            (change.position.y / size.height).coerceIn(0f, 1f),
-                        )
-                    if (erasing) erase(point)
-                    else if (current.size < 5000) current = current + point
-                }
-            }
-    ) {
-        strokes.forEachIndexed { i, stroke ->
-            drawPath(
-                paths[i],
-                Color(stroke.color),
-                style =
-                    androidx.compose.ui.graphics.drawscope.Stroke(
-                        stroke.width,
-                        cap = StrokeCap.Round,
-                    ),
-            )
-        }
-        drawPath(
-            currentPath,
-            Color(color),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(thickness, cap = StrokeCap.Round),
-        )
     }
 }

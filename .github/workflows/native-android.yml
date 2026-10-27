@@ -1,5 +1,8 @@
 name: Native Android
 on:
+  push:
+    branches: [codex/paper-ui]
+    paths: ['native-android/**', '.github/workflows/native-android.yml']
   pull_request:
     paths: ['native-android/**', '.github/workflows/native-android.yml']
   workflow_dispatch:
@@ -57,5 +60,7 @@ jobs:
           name: native-android-preview
           path: |
             native-android/app/build/outputs/apk/debug/*.apk
+            native-android/app/build/outputs/apk/release/*.apk
+            native-android/benchmark/build/outputs/apk/**/*.apk
             native-android/app/build/reports/
             native-android/core/build/reports/

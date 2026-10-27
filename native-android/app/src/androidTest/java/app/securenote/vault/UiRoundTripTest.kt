@@ -61,7 +61,8 @@ class UiRoundTripTest {
         }
         rule.onNode(isToggleable()).performScrollTo().performClick()
         rule.onNodeWithText("Continue").performScrollTo().performClick()
-        rule.onNodeWithText("New note").performScrollTo().performClick()
+        rule.onNodeWithTag("add-item").performClick()
+        rule.onNodeWithText("New note", substring = false).performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithTag("note-title").fetchSemanticsNodes().isNotEmpty()
         }
@@ -73,6 +74,18 @@ class UiRoundTripTest {
         onView(isAssignableFrom(EditText::class.java))
             .perform(replaceText("Private native note body"))
         rule.onNodeWithText("Back", substring = false).performClick()
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("nav-notes").performClick()
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("nav-media").performClick()
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isEmpty()
+        }
+        rule.onNodeWithTag("nav-all").performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
         }
@@ -98,5 +111,40 @@ class UiRoundTripTest {
         }
         onView(isAssignableFrom(EditText::class.java))
             .check(matches(withText(containsString("Private native note body"))))
+
+        // Exercise the styled native controller with synthetic encrypted audio.
+        val seconds = 5
+        val samples = 44100 * seconds
+        val wav =
+            java.nio.ByteBuffer.allocate(44 + samples * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        wav.put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray())
+        wav.putInt(16).putShort(1.toShort()).putShort(1.toShort()).putInt(44100).putInt(88200)
+        wav.putShort(2.toShort())
+            .putShort(16.toShort())
+            .put("data".toByteArray())
+            .putInt(samples * 2)
+        repeat(samples) { i ->
+            wav.putShort(
+                (kotlin.math.sin(i * 2.0 * Math.PI * 220 / 44100) * 1000).toInt().toShort()
+            )
+        }
+        val mediaId =
+            kotlinx.coroutines.runBlocking {
+                model.store.importBytes("Paper playback.wav", "audio/wav", wav.array())
+            }
+        wav.array().fill(0)
+        rule.runOnIdle { model.navigate(mediaId) }
+        rule.waitUntil(15000) {
+            rule.onAllNodesWithTag("native-media-player").fetchSemanticsNodes().isNotEmpty()
+        }
+        onView(withId(androidx.media3.ui.R.id.exo_play_pause))
+            .check(matches(isDisplayed()))
+            .perform(androidx.test.espresso.action.ViewActions.click())
+        rule.waitUntil(15000) { model.playing }
+        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        org.junit.Assert.assertFalse(model.unlocked.value)
+        org.junit.Assert.assertFalse(model.playing)
+        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        rule.onNodeWithTag("vault-password").assertExists()
     }
 }

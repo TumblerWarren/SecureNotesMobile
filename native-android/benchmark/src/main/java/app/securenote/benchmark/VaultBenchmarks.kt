@@ -56,6 +56,7 @@ class StartupProfileGenerator {
             node(By.text("Record your recovery key"))
             node(By.checkable(true)).click()
             node(By.text("Continue")).click()
+            node(By.desc("Add")).click()
             node(By.text("New note")).click()
             node(By.res("note-title")).text = "Synthetic profile note"
             node(By.text("Lock")).click()

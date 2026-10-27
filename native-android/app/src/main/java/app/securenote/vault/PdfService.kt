@@ -14,9 +14,11 @@ class PdfService : Service() {
     private val sessions = ConcurrentHashMap<String, Session>()
 
     private class Session {
+        val closed = java.util.concurrent.atomic.AtomicBoolean(false)
         var renderer: PdfRenderer? = null
 
         fun close() {
+            closed.set(true)
             renderer?.close()
             renderer = null
         }
@@ -34,10 +36,15 @@ class PdfService : Service() {
         return Messenger(
                 object : Handler(thread.looper) {
                     override fun handleMessage(msg: Message) {
+                        if (session.closed.get()) {
+                            msg.data.getParcelable<ParcelFileDescriptor>("fd")?.close()
+                            return
+                        }
                         try {
                             when (msg.what) {
                                 OPEN -> {
-                                    session.close()
+                                    session.renderer?.close()
+                                    session.renderer = null
                                     val fd =
                                         msg.data.getParcelable<ParcelFileDescriptor>("fd")
                                             ?: error("Missing document")
@@ -95,7 +102,16 @@ class PdfService : Service() {
                                 CLOSE -> session.close()
                             }
                         } catch (e: Exception) {
-                            runCatching { msg.replyTo?.send(Message.obtain(null, ERROR)) }
+                            runCatching {
+                                msg.replyTo?.send(
+                                    Message.obtain(null, ERROR).apply {
+                                        data =
+                                            Bundle().apply {
+                                                putLong("request", msg.data.getLong("request"))
+                                            }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -104,7 +120,10 @@ class PdfService : Service() {
     }
 
     override fun onUnbind(intent: Intent): Boolean {
-        sessions.remove(intent.dataString)?.let { s -> Handler(thread.looper).post { s.close() } }
+        sessions.remove(intent.dataString)?.let { s ->
+            s.closed.set(true)
+            Handler(thread.looper).post { s.close() }
+        }
         return false
     }
 

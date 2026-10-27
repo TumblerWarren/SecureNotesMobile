@@ -1,35 +1,47 @@
 package app.securenote.vault
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun SettingsDialog(model: VaultModel, dismiss: () -> Unit, legacy: () -> Unit) {
+    val busy by model.busy.collectAsState()
     var changing by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     AlertDialog(
+        modifier = Modifier.secureEditing(),
         onDismissRequest = dismiss,
-        title = { Text("Vault settings") },
+        title = { Text("Your vault, your rules.", style = MaterialTheme.typography.headlineSmall) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 Text(
                     "Local storage only. Password required after locking. No cloud backup, external viewers, sharing, printing or plaintext export."
                 )
                 Text(
                     "Screen-off and leaving the app lock immediately. Foreground inactivity locks after five minutes. Playback counts as activity."
                 )
-                TextButton(legacy) { Text("Import an old SecureNote database") }
-                TextButton({ changing = !changing }) { Text("Change password") }
+                TextButton(legacy, enabled = !busy) { Text("Import an old SecureNote database") }
+                TextButton({ changing = !changing }, enabled = !busy) { Text("Change password") }
                 if (changing) {
                     OutlinedTextField(
                         current,
                         { current = it },
                         label = { Text("Current password") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                     )
@@ -37,6 +49,8 @@ fun SettingsDialog(model: VaultModel, dismiss: () -> Unit, legacy: () -> Unit) {
                         next,
                         { next = it },
                         label = { Text("New password (16+ characters)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                     )
@@ -44,6 +58,8 @@ fun SettingsDialog(model: VaultModel, dismiss: () -> Unit, legacy: () -> Unit) {
                         confirm,
                         { confirm = it },
                         label = { Text("Confirm new password") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled = !busy,
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
                     )
@@ -55,7 +71,8 @@ fun SettingsDialog(model: VaultModel, dismiss: () -> Unit, legacy: () -> Unit) {
                             confirm = ""
                             dismiss()
                         },
-                        enabled = current.isNotEmpty() && next.length >= 16 && next == confirm,
+                        enabled =
+                            !busy && current.isNotEmpty() && next.length >= 16 && next == confirm,
                     ) {
                         Text("Save password")
                     }
@@ -79,11 +96,13 @@ fun SettingsDialog(model: VaultModel, dismiss: () -> Unit, legacy: () -> Unit) {
 @Composable
 fun LegacyPasswordDialog(model: VaultModel) {
     var password by remember { mutableStateOf("") }
+    val busy by model.busy.collectAsState()
     AlertDialog(
+        modifier = Modifier.secureEditing(),
         onDismissRequest = { model.legacySource.value = null },
         title = { Text("Import old notes") },
         text = {
-            Column {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text(
                     "Enter the password of the old database. The old file is never modified. Parsing runs in an isolated process, and notes and attachments are copied into this vault. Legacy databases are limited to 64 MiB, with 16 MiB per note."
                 )
@@ -91,6 +110,8 @@ fun LegacyPasswordDialog(model: VaultModel) {
                     password,
                     { password = it },
                     label = { Text("Old database password") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled = !busy,
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
@@ -102,7 +123,7 @@ fun LegacyPasswordDialog(model: VaultModel) {
                     model.importLegacy(password.toByteArray())
                     password = ""
                 },
-                enabled = password.isNotEmpty(),
+                enabled = !busy && password.isNotEmpty(),
             ) {
                 Text("Import")
             }

@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.SecureNote.Paper" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowBackground">#F6F1E7</item>
+        <item name="android:colorAccent">#A9513F</item>
+        <item name="android:statusBarColor">#F6F1E7</item>
+        <item name="android:navigationBarColor">#F6F1E7</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

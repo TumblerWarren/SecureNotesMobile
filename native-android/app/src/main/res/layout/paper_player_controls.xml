@@ -1,0 +1,15 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom"
+    android:orientation="vertical" android:background="#F6F1E7" android:padding="16dp">
+    <androidx.media3.ui.DefaultTimeBar android:id="@id/exo_progress" android:layout_width="match_parent" android:layout_height="32dp"
+        app:played_color="#A9513F" app:scrubber_color="#A9513F" app:buffered_color="#CDC4B5" app:unplayed_color="#DED7CA" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@id/exo_position" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#736E65" android:textSize="12sp" />
+        <TextView android:id="@id/exo_duration" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#736E65" android:textSize="12sp" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal" android:gravity="center">
+        <ImageButton android:id="@id/exo_rew" android:src="@drawable/paper_rewind" android:layout_width="56dp" android:layout_height="56dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:tint="#A9513F" android:contentDescription="Back 10 seconds" />
+        <ImageButton android:id="@id/exo_play_pause" android:src="@drawable/paper_play" android:layout_width="64dp" android:layout_height="56dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:tint="#A9513F" android:contentDescription="Play or pause" />
+        <ImageButton android:id="@id/exo_ffwd" android:src="@drawable/paper_forward" android:layout_width="56dp" android:layout_height="56dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:tint="#A9513F" android:contentDescription="Forward 10 seconds" />
+    </LinearLayout>
+</LinearLayout>

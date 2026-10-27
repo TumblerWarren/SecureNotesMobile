@@ -1,0 +1,445 @@
+package app.securenote.vault
+
+import android.graphics.Bitmap
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+fun isEpubFile(mime: String, name: String = ""): Boolean =
+    mime.substringBefore(';').trim().equals("application/epub+zip", true) ||
+        name.endsWith(".epub", true)
+
+fun fileKind(mime: String, name: String = ""): String =
+    when {
+        mime == "application/x-securenote" -> "Note"
+        isEpubFile(mime, name) -> "EPUB"
+        mime == "application/pdf" -> "PDF"
+        mime.startsWith("image/") -> "Image"
+        mime.startsWith("video/") -> "Video"
+        mime.startsWith("audio/") -> "Audio"
+        mime.startsWith("text/") -> "Text"
+        else -> "Document"
+    }
+
+fun fileGlyph(mime: String, name: String = ""): PaperGlyph =
+    when (fileKind(mime, name)) {
+        "Note" -> PaperGlyph.Note
+        "EPUB" -> PaperGlyph.Book
+        "Image" -> PaperGlyph.Image
+        "Video" -> PaperGlyph.Media
+        "Audio" -> PaperGlyph.Audio
+        else -> PaperGlyph.Document
+    }
+
+fun fileSize(size: Long): String {
+    if (size < 1024) return "$size B"
+    if (size < 1024L * 1024) return "${size / 1024} KB"
+    if (size < 1024L * 1024 * 1024)
+        return String.format(Locale.getDefault(), "%.1f MB", size / 1048576.0)
+    return String.format(Locale.getDefault(), "%.1f GB", size / 1073741824.0)
+}
+
+fun itemDate(time: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(time))
+
+@Composable
+fun PaperFileBadge(mime: String, modifier: Modifier = Modifier, name: String = "") {
+    val accent =
+        if (mime == "application/pdf" || isEpubFile(mime, name)) Paper.Accent else Paper.Muted
+    Box(
+        modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (mime == "application/pdf" || isEpubFile(mime, name)) Paper.AccentSoft
+                else Paper.Inset
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        PaperIcon(fileGlyph(mime, name), color = accent)
+    }
+}
+
+@Composable
+fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
+    val query by model.query.collectAsState()
+    val category by model.category.collectAsState()
+    val pages = model.pages.collectAsLazyPagingItems()
+    val pinned =
+        (0 until minOf(2, pages.itemCount)).mapNotNull { pages.peek(it) }.takeWhile { it.pinned }
+    var deleting by remember { mutableStateOf<ItemSummary?>(null) }
+    var lastFilter by remember { mutableStateOf(category to query) }
+    LaunchedEffect(category, query) {
+        val next = category to query
+        if (lastFilter != next) {
+            state.scrollToItem(0)
+            lastFilter = next
+        }
+    }
+    val filters =
+        listOf("all" to "All", "notes" to "Notes", "documents" to "Documents", "media" to "Media")
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(145.dp),
+        state = state,
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().testTag("vault-library"),
+    ) {
+        item(key = "heading", span = { GridItemSpan(maxLineSpan) }) {
+            Column(Modifier.padding(top = 12.dp, bottom = 4.dp)) {
+                Text(
+                    when (category) {
+                        "notes" -> "A place for your thoughts."
+                        "documents" -> "The important details."
+                        "media" -> "Moments worth keeping."
+                        else -> "Everything, safely kept."
+                    },
+                    style = MaterialTheme.typography.headlineLarge,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    if (pages.itemCount == 0) "On this device"
+                    else
+                        "${pages.itemCount} ${if (pages.itemCount == 1) "item" else "items"} · On this device",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Paper.Muted,
+                )
+                Spacer(Modifier.height(20.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = {
+                        model.query.value = it
+                        model.touch()
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("vault-search"),
+                    placeholder = {
+                        Text(
+                            "Search your notes, files and media",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                    leadingIcon = { PaperIcon(PaperGlyph.Search) },
+                    trailingIcon =
+                        if (query.isNotEmpty()) {
+                            {
+                                IconButton({ model.query.value = "" }) {
+                                    PaperIcon(PaperGlyph.Close, "Clear search")
+                                }
+                            }
+                        } else null,
+                    singleLine = true,
+                    shape = RoundedCornerShape(30.dp),
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Paper.Inset,
+                            unfocusedContainerColor = Paper.Inset,
+                            focusedBorderColor = Paper.Accent,
+                            unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    filters.forEach { (key, label) ->
+                        Column(
+                            Modifier.width(if (key == "documents") 104.dp else 72.dp)
+                                .clickable { model.showLibrary(key) }
+                                .padding(top = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                label,
+                                color = if (category == key) Paper.Accent else Paper.Muted,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .height(2.dp)
+                                    .background(if (category == key) Paper.Accent else Paper.Line)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (pinned.isNotEmpty()) {
+            item(key = "pinned-label", span = { GridItemSpan(maxLineSpan) }) {
+                SectionLabel("Pinned", PaperGlyph.Pin)
+            }
+            pinned.forEach { pinnedItem ->
+                item(key = "pinned/${pinnedItem.id}", span = { GridItemSpan(maxLineSpan) }) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable { model.navigate(pinnedItem.id) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        PaperFileBadge(pinnedItem.mime, name = pinnedItem.name)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                pinnedItem.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "${fileKind(pinnedItem.mime, pinnedItem.name)} · Pinned",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Paper.Muted,
+                            )
+                        }
+                        FileMenu(
+                            pinnedItem,
+                            { model.pin(pinnedItem.id) },
+                            { deleting = pinnedItem },
+                        )
+                    }
+                }
+            }
+        }
+        if (pages.itemCount > pinned.size) {
+            item(key = "recent-label", span = { GridItemSpan(maxLineSpan) }) {
+                SectionLabel(if (query.isBlank()) "Recent" else "Results")
+            }
+        }
+        items(
+            count = (pages.itemCount - pinned.size).coerceAtLeast(0),
+            key = { i -> pages.peek(i + pinned.size)?.id ?: "loading/${i + pinned.size}" },
+        ) { i ->
+            val item = pages[i + pinned.size]
+            if (item == null)
+                Box(
+                    Modifier.height(190.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Paper.Inset)
+                )
+            else PaperItemCard(model, item, { deleting = item })
+        }
+        if (pages.loadState.refresh is LoadState.Loading) {
+            item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                LinearProgressIndicator(
+                    Modifier.fillMaxWidth(),
+                    color = Paper.Accent,
+                    trackColor = Paper.Inset,
+                )
+            }
+        } else if (
+            pages.loadState.refresh is LoadState.Error || pages.loadState.append is LoadState.Error
+        ) {
+            item(key = "retry", span = { GridItemSpan(maxLineSpan) }) {
+                Column(Modifier.padding(vertical = 24.dp)) {
+                    Text(
+                        "This collection couldn’t be loaded.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton({ pages.retry() }) { Text("Try again") }
+                }
+            }
+        } else if (pages.itemCount == 0) {
+            item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    Modifier.fillMaxWidth().padding(vertical = 36.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    PaperFileBadge(
+                        if (category == "notes") "application/x-securenote"
+                        else "application/octet-stream",
+                        Modifier.size(52.dp),
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        if (query.isNotBlank()) "Nothing found" else "Make yourself at home.",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        if (query.isNotBlank()) "Try another name or phrase."
+                        else "Add a note or import a file.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Paper.Muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    if (query.isBlank()) TextButton(onAdd) { Text("Add something") }
+                }
+            }
+        }
+    }
+    deleting?.let { item ->
+        ConfirmPaperDelete(item.name, { deleting = null }) {
+            deleting = null
+            model.delete(item.id)
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(label: String, glyph: PaperGlyph? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        if (glyph != null) PaperIcon(glyph, color = Paper.Muted, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> Unit) {
+    val isVisual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
+    var snippet by remember(item.id) { mutableStateOf("") }
+    LaunchedEffect(item.id, item.updated) {
+        if (item.mime == "application/x-securenote") {
+            try {
+                snippet = withContext(Dispatchers.IO) { model.store.dao.snippet(item.id).orEmpty() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                snippet = ""
+            }
+        }
+    }
+    Card(
+        onClick = { model.navigate(item.id) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 188.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Paper.Surface),
+        border = BorderStroke(1.dp, Paper.Line.copy(alpha = 0.7f)),
+    ) {
+        if (isVisual) PaperThumbnail(model, item, Modifier.fillMaxWidth().height(112.dp))
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!isVisual && item.mime != "application/x-securenote")
+                PaperFileBadge(item.mime, name = item.name)
+            Text(
+                item.name,
+                style =
+                    if (item.mime == "application/x-securenote") MaterialTheme.typography.titleLarge
+                    else MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (item.mime == "application/x-securenote")
+                Text(
+                    snippet.ifBlank { "Empty note" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Paper.Muted,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (item.mime == "application/x-securenote") itemDate(item.updated)
+                    else "${fileKind(item.mime, item.name)} · ${fileSize(item.size)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Paper.Muted,
+                    modifier = Modifier.weight(1f),
+                )
+                FileMenu(item, { model.pin(item.id) }, onDelete)
+            }
+        }
+    }
+    DisposableEffect(item.id) { onDispose { snippet = "" } }
+}
+
+@Composable
+private fun FileMenu(item: ItemSummary, pin: () -> Unit, delete: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton({ expanded = true }, modifier = Modifier.size(48.dp)) {
+            PaperIcon(PaperGlyph.More, "Options for ${item.name}", color = Paper.Muted)
+        }
+        DropdownMenu(expanded, { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(if (item.pinned) "Unpin" else "Pin") },
+                onClick = {
+                    expanded = false
+                    pin()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                onClick = {
+                    expanded = false
+                    delete()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PaperThumbnail(model: VaultModel, item: ItemSummary, modifier: Modifier) {
+    var bitmap by remember(item.id) { mutableStateOf<Bitmap?>(null) }
+    val busy by model.busy.collectAsState()
+    LaunchedEffect(item.id, busy) {
+        if (!busy)
+            try {
+                bitmap = model.previews.thumbnail(item)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                bitmap = null
+            }
+    }
+    Box(modifier.background(Paper.Inset), contentAlignment = Alignment.Center) {
+        val image = bitmap
+        if (image != null)
+            Image(
+                image.asImageBitmap(),
+                null,
+                Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        else PaperIcon(fileGlyph(item.mime), color = Paper.Muted, modifier = Modifier.size(32.dp))
+        if (item.mime.startsWith("video/"))
+            Box(
+                Modifier.align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .background(Paper.Media, RoundedCornerShape(6.dp))
+                    .padding(5.dp)
+            ) {
+                PaperIcon(
+                    PaperGlyph.Media,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+    }
+    DisposableEffect(item.id) { onDispose { bitmap = null } }
+}
+
+@Composable
+fun ConfirmPaperDelete(name: String, dismiss: () -> Unit, confirm: () -> Unit) {
+    AlertDialog(
+        modifier = Modifier.secureEditing(),
+        onDismissRequest = dismiss,
+        title = { Text("Delete permanently?", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Text("“$name” will be removed from this vault. Deleted items cannot be recovered.")
+        },
+        confirmButton = {
+            TextButton(confirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(dismiss) { Text("Keep item") } },
+    )
+}

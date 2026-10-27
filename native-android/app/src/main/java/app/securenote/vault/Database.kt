@@ -53,6 +53,28 @@ data class NoteBlock(
 )
 
 @Entity(
+    tableName = "drawing_strokes",
+    primaryKeys = ["blockId", "id"],
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = NoteBlock::class,
+                parentColumns = ["id"],
+                childColumns = ["blockId"],
+                onDelete = ForeignKey.CASCADE,
+            )
+        ],
+)
+data class DrawingStrokeRow(
+    val blockId: String,
+    val id: String,
+    val digest: String,
+    val content: String,
+)
+
+data class DrawingStrokeStamp(val id: String, val digest: String)
+
+@Entity(
     tableName = "previews",
     foreignKeys =
         [
@@ -80,14 +102,14 @@ data class ItemSummary(
 @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
 interface Items {
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items ORDER BY pinned DESC,updated DESC,rowId DESC"
+        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%'))) ORDER BY pinned DESC,updated DESC,rowId DESC"
     )
-    fun pages(): PagingSource<Int, ItemSummary>
+    fun pages(category: String = "all"): PagingSource<Int, ItemSummary>
 
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC,updated DESC,rowId DESC"
+        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%'))) AND rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC,updated DESC,rowId DESC"
     )
-    fun search(query: String): PagingSource<Int, ItemSummary>
+    fun search(query: String, category: String = "all"): PagingSource<Int, ItemSummary>
 
     @Query("SELECT fileKey FROM items WHERE id=:id") suspend fun objectKey(id: String): ByteArray?
 
@@ -98,7 +120,22 @@ interface Items {
     )
     suspend fun display(id: String): VaultItem?
 
+    @Query(
+        "SELECT rowId,id,name,mime,size,updated,NULL AS fileKey,NULL AS body,pinned,'' AS searchText FROM items WHERE id=:id"
+    )
+    fun observeDisplay(id: String): Flow<VaultItem?>
+
     @Query("SELECT body FROM items WHERE id=:id") suspend fun originalBody(id: String): String?
+
+    @Query("SELECT substr(searchText,1,140) FROM items WHERE id=:id")
+    suspend fun snippet(id: String): String?
+
+    // Files do not use the legacy note body. Reuse it for small, encrypted reader metadata.
+    @Query("SELECT body FROM items WHERE id=:id AND fileKey IS NOT NULL")
+    suspend fun readingState(id: String): String?
+
+    @Query("UPDATE items SET body=:state WHERE id=:id AND fileKey IS NOT NULL")
+    suspend fun saveReadingState(id: String, state: String)
 
     @Insert suspend fun insert(item: VaultItem)
 
@@ -107,7 +144,8 @@ interface Items {
     @Query("UPDATE items SET name=:name,body=:body,searchText=:body,updated=:updated WHERE id=:id")
     suspend fun saveNote(id: String, name: String, body: String, updated: Long)
 
-    @Query("UPDATE items SET name=:name WHERE id=:id") suspend fun rename(id: String, name: String)
+    @Query("UPDATE items SET name=:name,updated=:time WHERE id=:id")
+    suspend fun rename(id: String, name: String, time: Long = System.currentTimeMillis())
 
     @Query("UPDATE items SET pinned=NOT pinned WHERE id=:id") suspend fun togglePin(id: String)
 
@@ -130,13 +168,61 @@ interface Items {
 
     @Upsert suspend fun putBlock(block: NoteBlock)
 
+    @Query("UPDATE blocks SET position=:position WHERE id=:id")
+    suspend fun setBlockPosition(id: String, position: Long)
+
     @Query("UPDATE blocks SET content=:content,searchText=:searchText WHERE id=:id")
     suspend fun updateBlockText(id: String, content: String, searchText: String)
 
+    @Query("SELECT searchText FROM blocks WHERE id=:id")
+    suspend fun blockSearchText(id: String): String?
+
     @Transaction
     suspend fun editBlock(block: NoteBlock) {
+        val previous = blockSearchText(block.id) ?: return
         updateBlockText(block.id, block.content, block.searchText)
-        updateNoteIndex(block.noteId, System.currentTimeMillis())
+        if (previous != block.searchText) updateNoteIndex(block.noteId, System.currentTimeMillis())
+        else touchNote(block.noteId, System.currentTimeMillis())
+    }
+
+    @Query("SELECT * FROM drawing_strokes WHERE blockId=:id")
+    suspend fun drawingStrokes(id: String): List<DrawingStrokeRow>
+
+    @Query("SELECT id,digest FROM drawing_strokes WHERE blockId=:id")
+    suspend fun drawingStamps(id: String): List<DrawingStrokeStamp>
+
+    @Upsert suspend fun putDrawingStrokes(rows: List<DrawingStrokeRow>)
+
+    @Query("DELETE FROM drawing_strokes WHERE blockId=:blockId AND id IN (:ids)")
+    suspend fun removeDrawingStrokes(blockId: String, ids: List<String>)
+
+    @Query("UPDATE blocks SET content=:content WHERE id=:id")
+    suspend fun updateDrawingManifest(id: String, content: String)
+
+    @Query("UPDATE items SET updated=:time WHERE id=:id")
+    suspend fun touchNote(id: String, time: Long)
+
+    @Query("SELECT count(*) FROM blocks WHERE id=:id AND kind='drawing'")
+    suspend fun blockExists(id: String): Int
+
+    @Query("SELECT * FROM blocks WHERE id=:id") suspend fun findBlock(id: String): NoteBlock?
+
+    @Transaction
+    suspend fun drawingSnapshot(id: String): Pair<NoteBlock?, List<DrawingStrokeRow>> =
+        findBlock(id) to drawingStrokes(id)
+
+    @Transaction
+    suspend fun saveDrawing(block: NoteBlock, manifest: String, rows: List<DrawingStrokeRow>) {
+        if (blockExists(block.id) == 0) return
+        val previous = drawingStamps(block.id).associate { it.id to it.digest }
+        val retained = rows.map { it.id }.toHashSet()
+        putDrawingStrokes(rows.filter { previous[it.id] != it.digest })
+        previous.keys
+            .filter { it !in retained }
+            .chunked(200)
+            .forEach { removeDrawingStrokes(block.id, it) }
+        updateDrawingManifest(block.id, manifest)
+        touchNote(block.noteId, System.currentTimeMillis())
     }
 
     @Query("DELETE FROM blocks WHERE id=:id") suspend fun deleteBlockRow(id: String)
@@ -169,8 +255,15 @@ interface Items {
 }
 
 @Database(
-    entities = [VaultItem::class, SearchEntry::class, NoteBlock::class, Preview::class],
-    version = 2,
+    entities =
+        [
+            VaultItem::class,
+            SearchEntry::class,
+            NoteBlock::class,
+            Preview::class,
+            DrawingStrokeRow::class,
+        ],
+    version = 3,
     exportSchema = true,
 )
 abstract class VaultDatabase : RoomDatabase() {

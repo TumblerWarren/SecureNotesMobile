@@ -20,6 +20,16 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     val recovery = MutableStateFlow<ByteArray?>(null)
     val screen = MutableStateFlow<String?>(null)
     val query = MutableStateFlow("")
+    val category = MutableStateFlow("all")
+
+    fun showLibrary(next: String) {
+        require(next in setOf("all", "notes", "documents", "media"))
+        screen.value = null
+        history.clear()
+        category.value = next
+        touch()
+    }
+
     val status = MutableStateFlow("")
     val legacySource = MutableStateFlow<Uri?>(null)
     val attachmentPicker = MutableStateFlow<String?>(null)
@@ -46,25 +56,128 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         queue("title/$id") { dao.rename(id, title.take(255)) }
     }
 
+    fun queueReadingState(id: String, state: String) {
+        if (!unlocked.value || !store.isOpen) return
+        require(state.length <= 512)
+        val dao = store.dao
+        queue("reader/$id") { dao.saveReadingState(id, state) }
+    }
+
     fun queueBlock(block: NoteBlock) {
         if (!unlocked.value) return
         val dao = store.dao
         queue(block.id) { dao.editBlock(block) }
     }
 
+    internal fun queueTable(block: NoteBlock, table: NoteTable) {
+        if (!unlocked.value || !store.isOpen) return
+        val dao = store.dao
+        queue(block.id) {
+            val next =
+                withContext(Dispatchers.Default) {
+                    block.copy(content = table.encode(), searchText = table.searchText())
+                }
+            dao.editBlock(next)
+        }
+    }
+
+    internal fun queueDrawing(
+        block: NoteBlock,
+        strokes: List<NoteStroke>,
+        aspect: Float,
+        paper: String,
+    ) {
+        if (!unlocked.value || !store.isOpen) return
+        val dao = store.dao
+        val encoder = drawingEncoders.getOrPut(block.id) { DrawingEncoder() }
+        queue(block.id) {
+            val (manifest, rows) =
+                withContext(Dispatchers.Default) {
+                    encoder.prepare(block.id, strokes, aspect, paper)
+                }
+            dao.saveDrawing(block, manifest, rows)
+        }
+    }
+
+    private val drawingEncoders = mutableMapOf<String, DrawingEncoder>()
+
+    internal fun observeNoteBlocks(id: String): Flow<List<NoteBlock>> = flow {
+        val dao = store.dao
+        val version = store.version()
+        val hydrated = mutableMapOf<String, Pair<String, NoteBlock>>()
+        dao.observeBlocks(id).distinctUntilChanged().collect { rows ->
+            store.checkVersion(version)
+            val resolved =
+                withContext(Dispatchers.Default) {
+                    rows.mapNotNull { block ->
+                        if (block.kind != "drawing") block
+                        else {
+                            val cached = hydrated[block.id]
+                            if (cached != null && cached.first == block.content)
+                                cached.second.copy(position = block.position)
+                            else
+                                DrawingPersistence.hydrate(dao, block).also {
+                                    if (it != null) hydrated[block.id] = block.content to it
+                                }
+                        }
+                    }
+                }
+            hydrated.keys.retainAll(rows.map { it.id }.toSet())
+            store.checkVersion(version)
+            emit(resolved)
+        }
+    }
+        .flowOn(Dispatchers.IO)
+
+    internal fun queueRichText(block: NoteBlock, snapshot: android.text.SpannedString) {
+        if (!unlocked.value) return
+        val dao = store.dao
+        queue(block.id) {
+            // Snapshot contains only immutable text and approved formatting spans, never a view.
+            val html =
+                withContext(Dispatchers.Default) {
+                    android.text.Html.toHtml(
+                        snapshot,
+                        android.text.Html.TO_HTML_PARAGRAPH_LINES_CONSECUTIVE,
+                    )
+                }
+            dao.editBlock(block.copy(content = html, searchText = snapshot.toString()))
+        }
+    }
+
+    internal suspend fun prepareNote(id: String) {
+        val version = store.version()
+        gate.withLock {
+            savePending()
+            store.checkVersion(version)
+            store.ensureBlocks(id)
+            drawingEncoders.clear()
+        }
+    }
+
     private fun queue(id: String, save: suspend () -> Unit) {
         if (!unlocked.value) return
         touch()
+        val since = pendingSince.getOrPut(id) { android.os.SystemClock.elapsedRealtime() }
         pendingWrites[id] = save
         saveJobs.remove(id)?.cancel()
         saveJobs[id] = viewModelScope.launch {
-            delay(300)
+            delay(
+                minOf(
+                    300L,
+                    (2000L - (android.os.SystemClock.elapsedRealtime() - since)).coerceAtLeast(0),
+                )
+            )
+            // Only debounce timers are cancelled by the next keystroke. A save already
+            // waiting for/holding the gate must finish and stays pending until committed.
+            saveJobs.remove(id)
             gate.withLock {
-                val action = pendingWrites.remove(id) ?: return@withLock
                 try {
-                    action()
+                    savePending(id)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    message.value = "Changes could not be saved."
+                    message.value = "Changes could not be saved. They will be retried."
                 }
             }
         }
@@ -74,10 +187,9 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         store.addBlock(id, kind, content)
     }
 
-    fun removeBlock(block: NoteBlock) {
-        saveJobs.remove(block.id)?.cancel()
-        pendingWrites.remove(block.id)
-        runWork { store.dao.deleteBlock(block) }
+    fun removeBlock(block: NoteBlock) = runWork {
+        store.removeNoteBlock(block)
+        drawingEncoders.remove(block.id)
     }
 
     fun moveBlock(block: NoteBlock, direction: Int) = runWork {
@@ -86,8 +198,9 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         val to = from + direction
         if (from >= 0 && to in all.indices)
             store.transaction {
-                store.dao.saveBlock(all[from].copy(position = all[to].position))
-                store.dao.saveBlock(all[to].copy(position = all[from].position))
+                store.dao.setBlockPosition(all[from].id, all[to].position)
+                store.dao.setBlockPosition(all[to].id, all[from].position)
+                store.dao.updateNoteIndex(block.noteId, System.currentTimeMillis())
             }
     }
 
@@ -135,6 +248,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     private var operation: Job? = null
     private var cleanup: Job? = null
     private val lockCallbacks = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
+    private val pendingSince = mutableMapOf<String, Long>()
     private val pendingWrites = linkedMapOf<String, suspend () -> Unit>()
     private val saveJobs = mutableMapOf<String, Job>()
 
@@ -143,40 +257,31 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         return { lockCallbacks.remove(callback) }
     }
 
-    fun queueNote(id: String, title: String, body: String, complete: () -> Unit) {
-        if (!unlocked.value) return
-        touch()
-        val dao = store.dao
-        pendingWrites[id] = { dao.saveNote(id, title, body, System.currentTimeMillis()) }
-        saveJobs.remove(id)?.cancel()
-        saveJobs[id] = viewModelScope.launch {
-            delay(300)
-            gate.withLock {
-                val save = pendingWrites.remove(id) ?: return@withLock
-                try {
-                    save()
-                    complete()
-                } catch (e: Exception) {
-                    message.value = "Note could not be saved."
-                }
-            }
+    private suspend fun savePending(only: String? = null) {
+        val entries =
+            pendingWrites.entries
+                .filter { only == null || it.key == only }
+                .map { it.key to it.value }
+        for ((id, save) in entries) {
+            save()
+            // An edit can arrive while the database suspends. Never remove that newer save.
+            if (pendingWrites[id] === save) {
+                pendingWrites.remove(id)
+                pendingSince.remove(id)
+            } else pendingSince[id] = android.os.SystemClock.elapsedRealtime()
         }
     }
 
     suspend fun flushWrites() {
-        gate.withLock {
-            val saves = pendingWrites.values.toList()
-            pendingWrites.clear()
-            saves.forEach { it() }
-        }
+        gate.withLock { savePending() }
     }
 
     private var generation = 0
     private var lastInteraction = android.os.SystemClock.elapsedRealtime()
     var playing = false
     val pages =
-        combine(unlocked, query.debounce(250)) { open, q -> open to q }
-            .flatMapLatest { (open, q) ->
+        combine(unlocked, query.debounce(250), category) { open, q, type -> Triple(open, q, type) }
+            .flatMapLatest { (open, q, type) ->
                 if (!open) flowOf(PagingData.empty())
                 else
                     Pager(
@@ -189,12 +294,13 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                         ) {
                             val tokens =
                                 q.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(10)
-                            if (tokens.isEmpty()) store.dao.pages()
+                            if (tokens.isEmpty()) store.dao.pages(type)
                             else
                                 store.dao.search(
                                     tokens.joinToString(" AND ") {
                                         "\"${it.replace("\"", "\"\"")}\"*"
-                                    }
+                                    },
+                                    type,
                                 )
                         }
                         .flow
@@ -229,9 +335,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
             try {
                 waitForCleanup?.join()
                 gate.withLock {
-                    val saves = pendingWrites.values.toList()
-                    pendingWrites.clear()
-                    saves.forEach { it() }
+                    savePending()
                     block()
                 }
             } catch (e: CancellationException) {
@@ -303,6 +407,11 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun importUris(uris: List<Uri>) {
+        if (uris.isEmpty()) {
+            attachmentNote = null
+            pendingImports = emptyList()
+            return
+        }
         pendingImports = uris
         if (unlocked.value) runWork { importPending() }
     }
@@ -332,6 +441,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(id: String) = runWork {
         store.delete(id)
+        drawingEncoders.clear()
         screen.value = null
     }
 
@@ -341,6 +451,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         if (!unlocked.value && !busy.value) return
         generation++
         store.revoke()
+        drawingEncoders.clear()
         operation?.cancel()
         operation = null
         lockCallbacks.toList().forEach { runCatching { it() } }
@@ -353,12 +464,14 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         screen.value = null
         history.clear()
         query.value = ""
+        category.value = "all"
         attachmentPicker.value = null
         dismissRecovery()
         // Readers were revoked before potentially blocking native player cleanup.
         previews.close()
         val saves = pendingWrites.values.toList()
         pendingWrites.clear()
+        pendingSince.clear()
         cleanup =
             viewModelScope.launch(Dispatchers.IO) {
                 store.closeReaders()
@@ -374,11 +487,13 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         store.revoke()
+        drawingEncoders.clear()
         lockCallbacks.toList().forEach { runCatching { it() } }
         lockCallbacks.clear()
         previews.close()
         val saves = pendingWrites.values.toList()
         pendingWrites.clear()
+        pendingSince.clear()
         CoroutineScope(Dispatchers.IO).launch {
             store.closeReaders()
             gate.withLock {

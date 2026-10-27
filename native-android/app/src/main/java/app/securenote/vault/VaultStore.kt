@@ -168,7 +168,14 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
                                     "CREATE TABLE IF NOT EXISTS previews (id TEXT NOT NULL PRIMARY KEY,bytes BLOB NOT NULL,FOREIGN KEY(id) REFERENCES items(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
                                 )
                             }
-                        }
+                        },
+                        object : androidx.room3.migration.Migration(2, 3) {
+                            override suspend fun migrate(connection: SQLiteConnection) {
+                                connection.execSQL(
+                                    "CREATE TABLE IF NOT EXISTS drawing_strokes (blockId TEXT NOT NULL,id TEXT NOT NULL,digest TEXT NOT NULL,content TEXT NOT NULL,PRIMARY KEY(blockId,id),FOREIGN KEY(blockId) REFERENCES blocks(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                                )
+                            }
+                        },
                     )
                     .setQueryCoroutineContext(Dispatchers.IO.limitedParallelism(2))
                     .addCallback(
@@ -218,7 +225,9 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             context.contentResolver
                 .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                 ?.use { c -> if (c.moveToFirst()) name = c.getString(0).take(255) }
-            val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+            val mime =
+                if (name.endsWith(".epub", ignoreCase = true)) "application/epub+zip"
+                else context.contentResolver.getType(uri) ?: "application/octet-stream"
             val key = Crypto.fileKey()
             var committedId: String? = null
             try {
@@ -364,19 +373,29 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             }
         }
 
-    suspend fun ensureBlocks(id: String) {
-        val note = dao.display(id) ?: return
-        if (dao.blocks(id).isEmpty())
+    suspend fun ensureBlocks(id: String) = transaction {
+        val note = dao.display(id) ?: error("Note is unavailable")
+        require(note.mime == "application/x-securenote")
+        if (dao.blocks(id).isEmpty()) {
+            val original = dao.originalBody(id).orEmpty()
             dao.saveBlock(
                 NoteBlock(
                     UUID.randomUUID().toString(),
                     id,
                     0,
                     "text",
-                    dao.originalBody(id).orEmpty(),
-                    dao.originalBody(id).orEmpty(),
+                    original,
+                    org.jsoup.Jsoup.parseBodyFragment(original).text(),
                 )
             )
+        }
+    }
+
+    suspend fun removeNoteBlock(block: NoteBlock) = transaction {
+        dao.deleteBlock(block)
+        // Keep a blank paragraph so reopening cannot resurrect the retained legacy body.
+        if (dao.blocks(block.noteId).isEmpty())
+            dao.saveBlock(NoteBlock(UUID.randomUUID().toString(), block.noteId, 0, "text", ""))
     }
 
     suspend fun addBlock(noteId: String, kind: String, content: String = ""): String {

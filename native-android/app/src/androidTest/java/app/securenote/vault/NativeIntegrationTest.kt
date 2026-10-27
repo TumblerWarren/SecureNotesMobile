@@ -97,6 +97,14 @@ class NativeIntegrationTest {
                 } finally {
                     page.recycle()
                 }
+                store.revoke()
+                var rejected = false
+                try {
+                    client.render(0, 256)
+                } catch (e: Exception) {
+                    rejected = true
+                }
+                assertTrue("Cached PDF rendering must require the original vault session", rejected)
             }
             png.fill(0)
             pdf.fill(0)

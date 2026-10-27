@@ -8,13 +8,16 @@ Native Kotlin/Compose rewrite of SecureNotesMobile. All vault data stays local. 
 - Native libsodium Argon2id (64 MiB, three passes), random 256-bit master/recovery keys, authenticated key wrappers, SQLCipher metadata and encrypted full-text search.
 - Tink authenticated streaming files with independent keys, bounded import buffers, atomic commits, orphan cleanup and revocable 64-bit random-access readers.
 - Paged collections; encrypted thumbnails; native tiled image zoom; paged UTF-8 text; isolated native PDF rendering; Media3 audio/video playback for supported Android codecs.
-- Native rich-text blocks, lists, links, tables, colored drawings, attachments, search and pinning. Saves update individual blocks rather than serializing the database.
+- Internal EPUB 2/3 reading for DRM-free reflowable books, with chapter contents, section navigation, inline raster images, internal links, font-size controls and encrypted reading position. See [EPUB support and limits](docs/EPUB.md).
+- Native rich-text blocks, lists, links, tables, colored drawings, attachments, search and pinning. Drafts survive block recycling; formatting preserves the native selection; debounced saves serialize only changed text blocks. See [notes optimization research and implementation](docs/NOTES-PERFORMANCE.md), [native notes implementation](docs/NOTES.md) and the [drawing canvas review and upgrade proposal](docs/DRAWING-RESEARCH.md).
 - Read-only legacy importer: decrypts the old database in an isolated process into memory, converts notes and embedded media, retains original HTML inside encrypted storage, and leaves the source untouched.
 - JVM security tests, Android functional/security/performance tests, a >4 GiB bounded-heap test, Macrobenchmark and profile generation tooling.
 
 Arbitrary files can be stored. Office document previews, password-protected PDFs and unsupported media codecs may not render internally. The app does not delete original plaintext files outside its vault. Recovery unlocks existing data; it cannot restore deleted files. See the [security contract](docs/SECURITY.md).
 
 ## Build
+
+Builds are currently paused at the user’s request. The Paper UI, EPUB reader, notes-editor fixes and canvas foundation have only received source-level checks; their updated test sources have not been executed. The commands below are reference procedures for when builds resume.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 
@@ -38,6 +41,8 @@ The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application I
 ```
 
 Compiling device tests does not execute them. The host large-file test uses a 128 MiB JVM heap and checks seeks beyond 2 GiB and 4 GiB; its results do not establish Android performance. See [performance procedures](docs/PERFORMANCE.md) for device benchmarks and profile generation.
+
+See the [other-feature source review](docs/FEATURE-REVIEW.md) for viewer, library, layout and performance fixes and remaining device checks.
 
 ## Release gates
 
