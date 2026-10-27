@@ -32,6 +32,7 @@ class SyntheticScreenCaptureTest {
         val directory = "test-visual-${UUID.randomUUID()}"
         lateinit var model: VaultModel
         lateinit var note: String
+        lateinit var pdf: String
         val store = VaultStore(context, directory)
         runBlocking {
             store.create("Synthetic screenshot vault password".toByteArray()).fill(0)
@@ -50,6 +51,44 @@ class SyntheticScreenCaptureTest {
                 )
             )
             store.addBlock(note, "text", "<p>Remember to pack the booking confirmation.</p>")
+            val document = android.graphics.pdf.PdfDocument()
+            val bytes = java.io.ByteArrayOutputStream()
+            try {
+                for (pageNumber in 1..2) {
+                    val page =
+                        document.startPage(
+                            android.graphics.pdf.PdfDocument.PageInfo.Builder(300, 420, pageNumber)
+                                .create()
+                        )
+                    page.canvas.drawColor(android.graphics.Color.WHITE)
+                    val paint =
+                        android.graphics.Paint().apply {
+                            color = android.graphics.Color.BLACK
+                            textSize = 18f
+                        }
+                    page.canvas.drawText("Travel itinerary", 20f, 40f, paint)
+                    paint.textSize = 12f
+                    repeat(12) { line ->
+                        page.canvas.drawText(
+                            "Day ${line+1}: A place to explore and remember.",
+                            20f,
+                            80f + line * 22,
+                            paint,
+                        )
+                    }
+                    document.finishPage(page)
+                }
+                document.writeTo(bytes)
+                pdf =
+                    store.importBytes(
+                        "Weekend itinerary.pdf",
+                        "application/pdf",
+                        bytes.toByteArray(),
+                    )
+            } finally {
+                document.close()
+                bytes.close()
+            }
             val another = store.newNote()
             store.dao.rename(another, "Ideas for the next project")
             val pinned = store.newNote()
@@ -83,7 +122,7 @@ class SyntheticScreenCaptureTest {
             }
             rule.waitUntil(15000) {
                 rule
-                    .onAllNodesWithText("A weekend away", substring = false)
+                    .onAllNodesWithText("4 items", substring = true)
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
@@ -95,6 +134,16 @@ class SyntheticScreenCaptureTest {
             if (font > 1.3f) rule.onNodeWithContentDescription("Insert").assertIsDisplayed()
             else rule.onNodeWithText("Insert", substring = false).assertIsDisplayed()
             save(prefix + "-notes")
+            rule.runOnIdle { model.navigate(pdf) }
+            rule.waitUntil(15000) {
+                rule
+                    .onAllNodesWithContentDescription("Page 1", substring = false)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+            rule.onNodeWithContentDescription("Pages", substring = false).assertIsDisplayed()
+            rule.onNodeWithContentDescription("Next page", substring = false).assertIsDisplayed()
+            save(prefix + "-pdf")
             rule.runOnIdle { model.openFolder(null) }
             rule.waitUntil(15000) {
                 rule

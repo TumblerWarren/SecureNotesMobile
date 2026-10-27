@@ -15,7 +15,6 @@ import android.text.style.URLSpan
 import android.view.View
 import android.widget.TextView
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -356,42 +355,35 @@ internal fun EpubViewer(model: VaultModel, id: String) {
         }
         HorizontalDivider(color = Paper.Line)
         Row(
-            Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .background(Paper.Background)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            TextButton(
+            IconButton(
                 { navigate { client.move(-1) } },
                 enabled = frame?.previous == true && !loading && failure.isEmpty(),
             ) {
-                PaperIcon(PaperGlyph.Back)
-                Spacer(Modifier.width(4.dp))
-                Text("Previous")
+                PaperIcon(PaperGlyph.Back, "Previous section")
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val current = frame
-                if (current != null) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                frame?.let { current ->
                     Text(
-                        "Chapter ${current.chapter + 1} / ${catalog?.chapters?.size ?: 0}",
+                        "Chapter ${current.chapter+1} / ${catalog?.chapters?.size ?: 0}",
                         style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
                     )
                     Text(
-                        "Section ${current.section + 1} / ${current.sections}",
+                        "Section ${current.section+1} / ${current.sections}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Paper.Muted,
+                        maxLines = 1,
                     )
                 }
             }
-            TextButton(
+            IconButton(
                 { navigate { client.move(1) } },
                 enabled = frame?.next == true && !loading && failure.isEmpty(),
             ) {
-                Text("Next")
-                Spacer(Modifier.width(4.dp))
-                PaperIcon(PaperGlyph.Next)
+                PaperIcon(PaperGlyph.Next, "Next section")
             }
         }
     }

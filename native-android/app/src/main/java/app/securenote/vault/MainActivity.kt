@@ -869,7 +869,11 @@ private fun ImageViewer(model: VaultModel, id: String) {
         }
         if (state == "loading") CircularProgressIndicator(Modifier.align(Alignment.Center))
         if (state == "error")
-            Column(Modifier.align(Alignment.Center).background(Paper.Background).padding(PaperSpacing.Screen)) {
+            Column(
+                Modifier.align(Alignment.Center)
+                    .background(Paper.Background)
+                    .padding(PaperSpacing.Screen)
+            ) {
                 TextButton({ imageAttempt++ }) { Text("Retry image") }
                 Text(
                     "Image preview unavailable. The encrypted file is kept.",
@@ -919,23 +923,30 @@ private fun TextViewer(model: VaultModel, id: String) {
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(PaperSpacing.Screen),
+            modifier =
+                Modifier.weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(scroll)
+                    .padding(PaperSpacing.Screen),
         )
         HorizontalDivider(color = Paper.Line)
         Row(
-            Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            TextButton({ page-- }, enabled = page > 0) { Text("Previous") }
+            IconButton({ page-- }, enabled = page > 0) {
+                PaperIcon(PaperGlyph.Back, "Previous page")
+            }
             Text(
-                "${page + 1} / $count",
+                "${page+1} / $count",
                 style = MaterialTheme.typography.bodySmall,
-                color = Paper.Muted,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            TextButton({ page++ }, enabled = page + 1 < count) { Text("Next") }
+            IconButton({ page++ }, enabled = page + 1 < count) {
+                PaperIcon(PaperGlyph.Next, "Next page")
+            }
         }
     }
     DisposableEffect(Unit) { onDispose { text = "" } }

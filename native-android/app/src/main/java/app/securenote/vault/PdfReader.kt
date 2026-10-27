@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.*
@@ -85,23 +88,28 @@ internal fun SecurePdfReader(model: VaultModel, id: String) {
             }
         if (count > 0)
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(
+                IconButton(
                     { scope.launch { list.animateScrollToItem((current - 1).coerceAtLeast(0)) } },
                     enabled = current > 0,
                 ) {
-                    Text("Previous")
+                    PaperIcon(PaperGlyph.Back, "Previous page")
                 }
-                TextButton({
-                    jumpText = "${current+1}"
-                    jump = true
-                }) {
-                    Text("${current+1} / $count · Go to")
-                }
-                TextButton({ thumbnails = true }) { Text("Pages") }
                 TextButton(
+                    {
+                        jumpText = "${current+1}"
+                        jump = true
+                    },
+                    modifier =
+                        Modifier.weight(1f).semantics {
+                            contentDescription = "Go to page, ${current+1} of $count"
+                        },
+                ) {
+                    Text("${current+1} / $count", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(
                     {
                         scope.launch {
                             list.animateScrollToItem((current + 1).coerceAtMost(count - 1))
@@ -109,8 +117,9 @@ internal fun SecurePdfReader(model: VaultModel, id: String) {
                     },
                     enabled = current + 1 < count,
                 ) {
-                    Text("Next")
+                    PaperIcon(PaperGlyph.Next, "Next page")
                 }
+                IconButton({ thumbnails = true }) { PaperIcon(PaperGlyph.List, "Pages") }
             }
     }
     if (jump)
