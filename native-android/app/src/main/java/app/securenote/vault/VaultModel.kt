@@ -340,6 +340,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     fun lock() {
         if (!unlocked.value && !busy.value) return
         generation++
+        store.revoke()
         operation?.cancel()
         operation = null
         lockCallbacks.toList().forEach { runCatching { it() } }
@@ -354,8 +355,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         query.value = ""
         attachmentPicker.value = null
         dismissRecovery()
-        // Revoke readers synchronously before asynchronous database cleanup.
-        store.revoke()
+        // Readers were revoked before potentially blocking native player cleanup.
         previews.close()
         val saves = pendingWrites.values.toList()
         pendingWrites.clear()

@@ -43,6 +43,35 @@ fun proxyDescriptor(
                 },
                 Handler(thread.looper),
             )
+            .also { descriptor ->
+                try {
+                    // Cached FUSE pages would bypass onRead and its session check after lock.
+                    // O_DIRECT applies to the shared open-file description, including IPC dup FDs.
+                    val flags =
+                        android.system.Os.fcntlInt(
+                            descriptor.fileDescriptor,
+                            OsConstants.F_GETFL,
+                            0,
+                        )
+                    android.system.Os.fcntlInt(
+                        descriptor.fileDescriptor,
+                        OsConstants.F_SETFL,
+                        flags or OsConstants.O_DIRECT,
+                    )
+                    check(
+                        android.system.Os.fcntlInt(
+                            descriptor.fileDescriptor,
+                            OsConstants.F_GETFL,
+                            0,
+                        ) and OsConstants.O_DIRECT != 0
+                    ) {
+                        "Uncached native viewing is unavailable"
+                    }
+                } catch (e: Exception) {
+                    descriptor.close()
+                    throw e
+                }
+            }
     } catch (e: Exception) {
         thread.quitSafely()
         reader.close()

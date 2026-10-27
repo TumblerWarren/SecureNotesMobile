@@ -82,7 +82,11 @@ class UiRoundTripTest {
         }
         onView(isAssignableFrom(EditText::class.java))
             .check(matches(withText(containsString("Private native note body"))))
+        val model = androidx.lifecycle.ViewModelProvider(rule.activity)[VaultModel::class.java]
+        val revokedFirst = java.util.concurrent.atomic.AtomicBoolean(false)
+        model.onLock { revokedFirst.set(!model.store.isOpen) }
         rule.onNodeWithText("Lock", substring = false).performClick()
+        org.junit.Assert.assertTrue("Revoke readers before native cleanup", revokedFirst.get())
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
         rule.onNodeWithText("Unlock", substring = false).performScrollTo().performClick()
         rule.waitUntil(30000) {
