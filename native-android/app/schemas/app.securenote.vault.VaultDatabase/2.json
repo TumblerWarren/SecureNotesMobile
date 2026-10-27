@@ -1,0 +1,256 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "ecbfea7bb20662b94aed96446cc8437d",
+    "entities": [
+      {
+        "tableName": "items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`rowId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `mime` TEXT NOT NULL, `size` INTEGER NOT NULL, `updated` INTEGER NOT NULL, `fileKey` BLOB, `body` TEXT, `pinned` INTEGER NOT NULL, `searchText` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mime",
+            "columnName": "mime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updated",
+            "columnName": "updated",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileKey",
+            "columnName": "fileKey",
+            "affinity": "BLOB"
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "rowId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_items_id",
+            "unique": true,
+            "columnNames": [
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_items_id` ON `${TABLE_NAME}` (`id`)"
+          },
+          {
+            "name": "index_items_pinned_updated_rowId",
+            "unique": false,
+            "columnNames": [
+              "pinned",
+              "updated",
+              "rowId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_items_pinned_updated_rowId` ON `${TABLE_NAME}` (`pinned`, `updated`, `rowId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "item_search",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`name` TEXT NOT NULL, `searchText` TEXT NOT NULL, content=`items`)",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "rowid"
+          ]
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "simple",
+          "tokenizerArgs": [],
+          "contentTable": "items",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": [
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_item_search_BEFORE_UPDATE BEFORE UPDATE ON `items` BEGIN DELETE FROM `item_search` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_item_search_BEFORE_DELETE BEFORE DELETE ON `items` BEGIN DELETE FROM `item_search` WHERE `docid`=OLD.`rowid`; END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_item_search_AFTER_UPDATE AFTER UPDATE ON `items` BEGIN INSERT INTO `item_search`(`docid`, `name`, `searchText`) VALUES (NEW.`rowid`, NEW.`name`, NEW.`searchText`); END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_item_search_AFTER_INSERT AFTER INSERT ON `items` BEGIN INSERT INTO `item_search`(`docid`, `name`, `searchText`) VALUES (NEW.`rowid`, NEW.`name`, NEW.`searchText`); END"
+        ]
+      },
+      {
+        "tableName": "blocks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `noteId` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `content` TEXT NOT NULL, `searchText` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`noteId`) REFERENCES `items`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "noteId",
+            "columnName": "noteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_blocks_noteId_position",
+            "unique": false,
+            "columnNames": [
+              "noteId",
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_blocks_noteId_position` ON `${TABLE_NAME}` (`noteId`, `position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "items",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "noteId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "previews",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `bytes` BLOB NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`id`) REFERENCES `items`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytes",
+            "columnName": "bytes",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "items",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ecbfea7bb20662b94aed96446cc8437d')"
+    ]
+  }
+}
