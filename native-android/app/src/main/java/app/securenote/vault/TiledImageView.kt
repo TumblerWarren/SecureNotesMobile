@@ -32,6 +32,10 @@ class TiledImageView(
     private var ty = 0f
     private val requested = ConcurrentHashMap.newKeySet<String>()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val drawMatrix = Matrix()
+    private val inverseMatrix = Matrix()
+    private val visibleRect = RectF()
+    private val destinationRect = RectF()
     private var failed = false
     private val version = store.version()
     private val fallbackKey = "image/$id"
@@ -103,6 +107,8 @@ class TiledImageView(
                     failed = true
                     invalidate()
                 }
+            } finally {
+                if (closed.get()) releaseResources()
             }
         }
     }
@@ -190,24 +196,19 @@ class TiledImageView(
             return
         }
         if (imageWidth == 0 || width == 0) return
-        val matrix =
-            Matrix(orientation).apply {
-                postScale(scale, scale)
-                postTranslate(tx, ty)
-            }
-        val inverse = Matrix()
-        matrix.invert(inverse)
-        val visible = RectF(0f, 0f, width.toFloat(), height.toFloat())
-        inverse.mapRect(visible)
+        val matrix = drawMatrix
+        matrix.set(orientation)
+        matrix.postScale(scale, scale)
+        matrix.postTranslate(tx, ty)
+        matrix.invert(inverseMatrix)
+        val visible = visibleRect
+        visible.set(0f, 0f, width.toFloat(), height.toFloat())
+        inverseMatrix.mapRect(visible)
         canvas.save()
         canvas.concat(matrix)
         cache.getBitmap(fallbackKey)?.let {
-            canvas.drawBitmap(
-                it,
-                null,
-                RectF(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat()),
-                paint,
-            )
+            destinationRect.set(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat())
+            canvas.drawBitmap(it, null, destinationRect, paint)
             canvas.restore()
             return
         }
@@ -228,11 +229,18 @@ class TiledImageView(
         while (y < bottom) {
             var x = left
             while (x < right) {
-                val rect = Rect(x, y, min(imageWidth, x + step), min(imageHeight, y + step))
                 val key = "tile/$id/$sample/$x/$y"
                 val tile = cache.getBitmap(key)
-                if (tile != null) canvas.drawBitmap(tile, null, RectF(rect), paint)
-                else if (requested.add(key)) {
+                if (tile != null) {
+                    destinationRect.set(
+                        x.toFloat(),
+                        y.toFloat(),
+                        min(imageWidth, x + step).toFloat(),
+                        min(imageHeight, y + step).toFloat(),
+                    )
+                    canvas.drawBitmap(tile, null, destinationRect, paint)
+                } else if (requested.add(key)) {
+                    val rect = Rect(x, y, min(imageWidth, x + step), min(imageHeight, y + step))
                     val sampling = sample
                     scope.launch {
                         try {
@@ -252,9 +260,13 @@ class TiledImageView(
                             if (bitmap != null) {
                                 if (closed.get()) bitmap.recycle()
                                 else {
-                                    store.checkVersion(version)
-                                    cache.putBitmap(key, bitmap, version)
-                                    postInvalidateOnAnimation()
+                                    try {
+                                        cache.putBitmap(key, bitmap, version)
+                                        postInvalidateOnAnimation()
+                                    } catch (e: Exception) {
+                                        bitmap.recycle()
+                                        throw e
+                                    }
                                 }
                             }
                         } catch (e: Exception) {} finally {
@@ -272,11 +284,14 @@ class TiledImageView(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         scope.cancel()
-        CoroutineScope(Dispatchers.IO).launch {
-            decoder?.let { synchronized(it) { it.recycle() } }
-            decoder = null
-            descriptor?.close()
-            descriptor = null
-        }
+        CoroutineScope(Dispatchers.IO).launch { releaseResources() }
+    }
+
+    @Synchronized
+    private fun releaseResources() {
+        decoder?.let { synchronized(it) { it.recycle() } }
+        decoder = null
+        descriptor?.close()
+        descriptor = null
     }
 }

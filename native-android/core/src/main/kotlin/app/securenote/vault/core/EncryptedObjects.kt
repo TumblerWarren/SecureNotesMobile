@@ -88,6 +88,16 @@ class EncryptedObjects(private val directory: File, private val vaultId: String)
                 // Keep the file descriptor open after Tink finalizes the authenticated stream.
                 val nonClosing =
                     object : java.io.FilterOutputStream(file) {
+                        // FilterOutputStream's default bulk write loops through write(int).
+                        // Delegate bulk writes directly to preserve bounded streaming throughput.
+                        override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                            file.write(bytes, offset, length)
+                        }
+
+                        override fun write(bytes: ByteArray) {
+                            file.write(bytes)
+                        }
+
                         override fun close() {
                             flush()
                         }
