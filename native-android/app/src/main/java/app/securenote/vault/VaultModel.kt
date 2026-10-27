@@ -17,13 +17,32 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     val unlocked = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow("")
+    val messageSuccess = MutableStateFlow(false)
+    val passwordResult = MutableStateFlow<String?>(null)
+    val saveStatus = MutableStateFlow("Saved")
     val recovery = MutableStateFlow<ByteArray?>(null)
     val screen = MutableStateFlow<String?>(null)
     val query = MutableStateFlow("")
     val category = MutableStateFlow("all")
 
+    val folderId = MutableStateFlow<String?>(null)
+    val folderBrowsing = MutableStateFlow(false)
+
     fun showLibrary(next: String) {
-        require(next in setOf("all", "notes", "documents", "media"))
+        require(
+            next in
+                setOf(
+                    "all",
+                    "notes",
+                    "documents",
+                    "media",
+                    "images",
+                    "videos",
+                    "audio",
+                    "pdf",
+                    "epub",
+                )
+        )
         screen.value = null
         history.clear()
         category.value = next
@@ -33,6 +52,26 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     val status = MutableStateFlow("")
     val legacySource = MutableStateFlow<Uri?>(null)
     val attachmentPicker = MutableStateFlow<String?>(null)
+    private var importDestination: String? = null
+    private var pendingTree: Uri? = null
+
+    fun prepareImport() {
+        importDestination = if (folderBrowsing.value) folderId.value else null
+    }
+
+    fun importTree(uri: Uri) {
+        pendingTree = uri
+        if (unlocked.value) runWork { importPending() }
+    }
+
+    fun resumeImport(job: FolderImportJob) = runWork {
+        FolderImporter(getApplication(), store).run(job) { status.value = it }
+    }
+
+    fun cancelImport() {
+        operation?.cancel()
+    }
+
     private var attachmentNote: String? = null
     private val history = ArrayDeque<String>()
 
@@ -46,6 +85,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun beginAttachment(id: String) {
+        prepareImport()
         attachmentNote = id
         attachmentPicker.value = id
     }
@@ -159,6 +199,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         if (!unlocked.value) return
         touch()
         val since = pendingSince.getOrPut(id) { android.os.SystemClock.elapsedRealtime() }
+        saveStatus.value = "Saving…"
         pendingWrites[id] = save
         saveJobs.remove(id)?.cancel()
         saveJobs[id] = viewModelScope.launch {
@@ -177,11 +218,15 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    message.value = "Changes could not be saved. They will be retried."
+                    saveStatus.value = "Save failed"
+                    messageSuccess.value = false
+                    message.value = "Changes are not saved. Use Retry in the note toolbar."
                 }
             }
         }
     }
+
+    fun retrySaves() = runWork { savePending() }
 
     fun addBlock(id: String, kind: String, content: String = "") = runWork {
         store.addBlock(id, kind, content)
@@ -212,8 +257,19 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         }
         runWork {
             try {
-                store.changePassword(current, next)
+                passwordResult.value = null
+                try {
+                    store.changePassword(current, next)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    passwordResult.value =
+                        "Password could not be changed. Check the current password and available storage."
+                    return@runWork
+                }
+                messageSuccess.value = true
                 message.value = "Password changed."
+                passwordResult.value = "success"
             } finally {
                 current.fill(0)
                 next.fill(0)
@@ -234,6 +290,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                     LegacyImporter(getApplication(), store).import(source, password) {
                         status.value = "Importing note $it"
                     }
+                messageSuccess.value = true
                 message.value = "Imported $count notes. Original file is unchanged."
             } finally {
                 password.fill(0)
@@ -270,6 +327,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                 pendingSince.remove(id)
             } else pendingSince[id] = android.os.SystemClock.elapsedRealtime()
         }
+        saveStatus.value = if (pendingWrites.isEmpty()) "Saved" else "Saving…"
     }
 
     suspend fun flushWrites() {
@@ -279,9 +337,25 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
     private var generation = 0
     private var lastInteraction = android.os.SystemClock.elapsedRealtime()
     var playing = false
+
+    private data class LibraryScope(
+        val open: Boolean,
+        val query: String,
+        val type: String,
+        val folder: String?,
+        val scoped: Boolean,
+    )
+
     val pages =
-        combine(unlocked, query.debounce(250), category) { open, q, type -> Triple(open, q, type) }
-            .flatMapLatest { (open, q, type) ->
+        combine(unlocked, query.debounce(250), category, folderId, folderBrowsing) {
+                open,
+                q,
+                type,
+                folder,
+                scoped ->
+                LibraryScope(open, q, type, folder, scoped)
+            }
+            .flatMapLatest { (open, q, type, folder, scoped) ->
                 if (!open) flowOf(PagingData.empty())
                 else
                     Pager(
@@ -294,13 +368,15 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                         ) {
                             val tokens =
                                 q.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(10)
-                            if (tokens.isEmpty()) store.dao.pages(type)
+                            if (tokens.isEmpty()) store.dao.pages(type, folder, scoped)
                             else
                                 store.dao.search(
                                     tokens.joinToString(" AND ") {
                                         "\"${it.replace("\"", "\"\"")}\"*"
                                     },
                                     type,
+                                    folder,
+                                    scoped,
                                 )
                         }
                         .flow
@@ -330,6 +406,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         val epoch = generation
         val waitForCleanup = cleanup
         busy.value = true
+        messageSuccess.value = false
         message.value = ""
         operation = viewModelScope.launch {
             try {
@@ -432,12 +509,67 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             currentCoroutineContext().ensureActive()
+            store.dao.moveItems(listOf(id), importDestination)
             if (note != null) store.addBlock(note, "attachment", id)
         }
         if (note != null && list.isNotEmpty()) screen.value = note
+        val tree = pendingTree
+        if (tree != null) {
+            pendingTree = null
+            val job =
+                FolderImportJob(
+                    java.util.UUID.randomUUID().toString(),
+                    tree.toString(),
+                    importDestination,
+                )
+            store.dao.putImportJob(job)
+            val failures = FolderImporter(getApplication(), store).run(job) { status.value = it }
+            messageSuccess.value = failures == 0
+            message.value =
+                if (failures == 0) "Folder imported. Originals remain outside the vault."
+                else "Some files could not be imported. Resume from Folders to retry."
+        }
     }
 
-    fun newNote() = runWork { navigate(store.newNote()) }
+    fun newNote() = runWork {
+        val id = store.newNote()
+        store.dao.moveItems(listOf(id), if (folderBrowsing.value) folderId.value else null)
+        navigate(id)
+    }
+
+    fun openFolder(id: String?) {
+        folderBrowsing.value = true
+        folderId.value = id
+        showLibrary("all")
+    }
+
+    fun folderUp() = runWork {
+        val id = folderId.value
+        folderId.value = if (id == null) null else store.dao.folder(id)?.parentId
+    }
+
+    fun saveFolder(name: String, existing: VaultFolder? = null, parent: String? = folderId.value) =
+        runWork {
+            val clean = name.trim()
+            store.dao.saveFolder(
+                VaultFolder(
+                    existing?.id ?: java.util.UUID.randomUUID().toString(),
+                    parent,
+                    clean,
+                    clean.lowercase(java.util.Locale.ROOT),
+                    existing?.color ?: 0,
+                )
+            )
+        }
+
+    fun moveFiles(ids: List<String>, destination: String?) = runWork {
+        store.dao.moveItems(ids, destination)
+    }
+
+    fun removeFolder(id: String) = runWork {
+        store.dao.dissolveFolder(id)
+        if (folderId.value == id) folderId.value = null
+    }
 
     fun delete(id: String) = runWork {
         store.delete(id)
@@ -465,6 +597,8 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         history.clear()
         query.value = ""
         category.value = "all"
+        folderId.value = null
+        folderBrowsing.value = false
         attachmentPicker.value = null
         dismissRecovery()
         // Readers were revoked before potentially blocking native player cleanup.

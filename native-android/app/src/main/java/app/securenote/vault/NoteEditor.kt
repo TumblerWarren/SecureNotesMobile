@@ -15,6 +15,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,6 +42,10 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
     var linkTarget by remember(item.id) { mutableStateOf<NoteLinkTarget?>(null) }
     var link by remember(item.id) { mutableStateOf("") }
     val busy by model.busy.collectAsState()
+    val saveStatus by model.saveStatus.collectAsState()
+    var toolRevision by remember { mutableIntStateOf(0) }
+    var insertMenu by remember { mutableStateOf(false) }
+    var managingBlocks by remember { mutableStateOf(false) }
     DisposableEffect(session) {
         fun clear() {
             session.close()
@@ -86,8 +93,8 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "title") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -117,67 +124,71 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                         },
                     )
                     Text(
-                        "On this device · ${itemDate(item.updated)}",
+                        "$saveStatus · ${itemDate(item.updated)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Paper.Muted,
                     )
                 }
             }
             items(blocks, key = { it.id }, contentType = { it.kind }) { block ->
-                Column(Modifier.fillMaxWidth()) {
-                    when (block.kind) {
-                        "table" ->
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = Paper.Surface,
-                                border = BorderStroke(1.dp, Paper.Line),
-                            ) {
-                                Box(Modifier.padding(8.dp)) {
-                                    TableBlock(block, session, { active = null }) { table ->
-                                        session.edited(block.id, table)
-                                        model.queueTable(block, table)
-                                    }
-                                }
-                            }
-                        "drawing" ->
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = Paper.Surface,
-                                border = BorderStroke(1.dp, Paper.Line),
-                            ) {
-                                Column(Modifier.padding(8.dp)) {
-                                    DrawingBlock(block, session) { strokes, aspect, paper ->
-                                        model.queueDrawing(block, strokes, aspect, paper)
-                                    }
-                                }
-                            }
-                        "attachment" ->
-                            Surface(shape = MaterialTheme.shapes.small, color = Paper.Inset) {
-                                TextButton(
-                                    { model.navigate(block.content) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = PaddingValues(16.dp),
+                Box(Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(end = if(managingBlocks) 48.dp else 0.dp)) {
+                        when (block.kind) {
+                            "table" ->
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = Paper.Surface,
+                                    border = BorderStroke(1.dp, Paper.Line),
                                 ) {
-                                    PaperIcon(PaperGlyph.Attach)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Open encrypted attachment")
+                                    Box(Modifier.padding(8.dp)) {
+                                        TableBlock(block, session, { active = null }) { table ->
+                                            session.edited(block.id, table)
+                                            model.queueTable(block, table)
+                                        }
+                                    }
                                 }
-                            }
-                        else ->
-                            RichTextBlock(
-                                block,
-                                session,
-                                { edit, focused ->
-                                    if (focused) active = edit
-                                    else if (active === edit) active = null
-                                },
-                            ) { snapshot ->
-                                session.edited(block.id, snapshot)
-                                model.queueRichText(block, snapshot)
-                            }
+                            "drawing" ->
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = Paper.Surface,
+                                    border = BorderStroke(1.dp, Paper.Line),
+                                ) {
+                                    Column(Modifier.padding(8.dp)) {
+                                        DrawingBlock(block, session) { strokes, aspect, paper ->
+                                            model.queueDrawing(block, strokes, aspect, paper)
+                                        }
+                                    }
+                                }
+                            "attachment" ->
+                                Surface(shape = MaterialTheme.shapes.small, color = Paper.Inset) {
+                                    TextButton(
+                                        { model.navigate(block.content) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(16.dp),
+                                    ) {
+                                        PaperIcon(PaperGlyph.Attach)
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("Open encrypted attachment")
+                                    }
+                                }
+                            else ->
+                                RichTextBlock(
+                                    block,
+                                    session,
+                                    { edit, focused ->
+                                        if (focused) {
+                                            active = edit
+                                            edit.onSelection = { toolRevision++ }
+                                        } else if (active === edit) active = null
+                                    },
+                                ) { snapshot ->
+                                    session.edited(block.id, snapshot)
+                                    model.queueRichText(block, snapshot)
+                                }
+                        }
                     }
                     var options by remember(block.id) { mutableStateOf(false) }
-                    Box(Modifier.align(Alignment.End)) {
+                    if(managingBlocks) Box(Modifier.align(Alignment.TopEnd)) {
                         IconButton(
                             { options = true },
                             enabled = !busy,
@@ -229,40 +240,84 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PaperEditorTool("Bold", letter = "B", enabled = target() != null) {
+            val revision = toolRevision
+            fun state(kind: String): FormatState {
+                revision.hashCode()
+                return target()?.formatState(kind) ?: FormatState.Off
+            }
+            PaperEditorTool(
+                "Bold",
+                letter = "B",
+                enabled = target() != null,
+                state = state("bold"),
+            ) {
                 target()?.toggle("bold")
             }
-            PaperEditorTool("Italic", letter = "I", enabled = target() != null) {
+            PaperEditorTool(
+                "Italic",
+                letter = "I",
+                enabled = target() != null,
+                state = state("italic"),
+            ) {
                 target()?.toggle("italic")
             }
-            PaperEditorTool("List", PaperGlyph.List, enabled = target() != null) {
-                target()?.bullets()
-            }
-            PaperEditorTool("Table", PaperGlyph.Table, enabled = !busy) {
-                model.addBlock(item.id, "table", "[[\"\",\"\"],[\"\",\"\"]]")
-            }
-            PaperEditorTool("Draw", PaperGlyph.Draw, enabled = !busy) {
-                model.addBlock(item.id, "drawing", "[]")
-            }
-            PaperEditorTool("Attach", PaperGlyph.Attach, enabled = !busy) {
-                model.beginAttachment(item.id)
-            }
-            PaperEditorTool("Underline", letter = "U", enabled = target() != null) {
+            PaperEditorTool(
+                "Underline",
+                letter = "U",
+                enabled = target() != null,
+                state = state("underline"),
+            ) {
                 target()?.toggle("underline")
             }
-            PaperEditorTool("Link", PaperGlyph.Link, enabled = target() != null) {
-                target()?.let { edit ->
-                    linkTarget =
-                        NoteLinkTarget(
-                            edit,
-                            minOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
-                            maxOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
-                            edit.revision,
+            PaperEditorTool(
+                "List",
+                PaperGlyph.List,
+                enabled = target() != null,
+                state = state("list"),
+            ) {
+                target()?.bullets()
+            }
+            Box {
+                PaperEditorTool("Insert", PaperGlyph.Add, enabled = !busy) { insertMenu = true }
+                DropdownMenu(insertMenu, { insertMenu = false }) {
+                    listOf("Table", "Drawing", "Attachment", "Link", "Manage blocks").forEach { label ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            enabled = label != "Link" || target() != null,
+                            onClick = {
+                                insertMenu = false
+                                when (label) {
+                                    "Table" ->
+                                        model.addBlock(
+                                            item.id,
+                                            "table",
+                                            "[[\"\",\"\"],[\"\",\"\"]]",
+                                        )
+                                    "Manage blocks" -> managingBlocks = !managingBlocks
+                                "Drawing" -> model.addBlock(item.id, "drawing", "[]")
+                                    "Attachment" -> model.beginAttachment(item.id)
+                                    else ->
+                                        target()?.let { edit ->
+                                            linkTarget =
+                                                NoteLinkTarget(
+                                                    edit,
+                                                    minOf(edit.selectionStart, edit.selectionEnd)
+                                                        .coerceAtLeast(0),
+                                                    maxOf(edit.selectionStart, edit.selectionEnd)
+                                                        .coerceAtLeast(0),
+                                                    edit.revision,
+                                                )
+                                        }
+                                }
+                            },
                         )
+                    }
                 }
             }
+            if (saveStatus == "Save failed") TextButton({ model.retrySaves() }) { Text("Retry") }
         }
     }
+
     linkTarget?.let { selected ->
         AlertDialog(
             modifier = Modifier.secureEditing(),
@@ -318,19 +373,33 @@ private fun PaperEditorTool(
     glyph: PaperGlyph? = null,
     letter: String? = null,
     enabled: Boolean = true,
+    state: FormatState = FormatState.Off,
     action: () -> Unit,
 ) {
     TextButton(
         action,
         enabled = enabled,
-        modifier = Modifier.widthIn(min = 54.dp),
+        modifier =
+            Modifier.widthIn(min = 48.dp).semantics {
+                selected = state == FormatState.On
+                stateDescription = if (!enabled) "Unavailable" else state.name
+            },
+        colors =
+            ButtonDefaults.textButtonColors(
+                containerColor =
+                    if (state != FormatState.Off && enabled) Paper.AccentSoft else Color.Transparent
+            ),
         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 8.dp),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (glyph != null) PaperIcon(glyph, color = Paper.Ink)
+            if (glyph != null)
+                PaperIcon(
+                    glyph,
+                    color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = 0.38f),
+                )
             else
                 Text(
                     letter.orEmpty(),
@@ -342,9 +411,13 @@ private fun PaperEditorTool(
                     fontWeight =
                         if (label == "Bold") androidx.compose.ui.text.font.FontWeight.Bold
                         else androidx.compose.ui.text.font.FontWeight.Normal,
-                    color = Paper.Ink,
+                    color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = 0.38f),
                 )
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Paper.Muted)
+            Text(
+                if (state == FormatState.Mixed) "$label −" else label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (enabled) Paper.Muted else Paper.Muted.copy(alpha = 0.38f),
+            )
         }
     }
 }
@@ -373,13 +446,13 @@ private fun RichTextBlock(
                 setTextColor(android.graphics.Color.rgb(39, 43, 40))
                 setHintTextColor(android.graphics.Color.rgb(115, 110, 101))
                 hint = "Write a note…"
-                minLines = 2
+                minLines = 1
                 maxLines = 24
                 textSize = 18f
                 typeface = Typeface.create("serif", Typeface.NORMAL)
                 setLineSpacing(5f * resources.displayMetrics.density, 1f)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                setPadding(0, 8, 0, 8)
+                setPadding(0, 0, 0, 0)
                 highlightColor = android.graphics.Color.rgb(243, 223, 213)
                 setSelectAllOnFocus(false)
                 this.onEdit = { editCallback(it) }

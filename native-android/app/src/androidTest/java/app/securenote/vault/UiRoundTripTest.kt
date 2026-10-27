@@ -81,7 +81,7 @@ class UiRoundTripTest {
         rule.waitUntil(15000) {
             rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithTag("nav-media").performClick()
+        rule.onNodeWithText("Videos", substring = false).performScrollTo().performClick()
         rule.waitUntil(15000) {
             rule.onAllNodesWithText("Native round-trip note").fetchSemanticsNodes().isEmpty()
         }

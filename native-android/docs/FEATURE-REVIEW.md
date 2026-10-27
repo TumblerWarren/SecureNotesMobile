@@ -1,5 +1,7 @@
 # Other-feature bug, layout and performance review
 
+Historical report: the build pause described below was subsequently lifted. [GitHub Actions run 40554407456](https://github.com/TumblerWarren/SecureNotesMobile/actions/runs/40554407456) passed compilation, lint, core checks and all 19 Android emulator tests for the later baseline. Current usability findings and outstanding visual validation are tracked in [App-wide validation](design/APP-WIDE-VALIDATION.md); passing those functional tests does not resolve the new layout findings.
+
 Source review date: 2026-10-27. Scope: library/navigation, PDF, EPUB, images, audio/video, plain text, unlock/recovery and settings. This is a source review with fixes; it is not a visual inspection of a running app. The user's pause on builds, tests, emulators and CI remains active.
 
 ## Findings and fixes

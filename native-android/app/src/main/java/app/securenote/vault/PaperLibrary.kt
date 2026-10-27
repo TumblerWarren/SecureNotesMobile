@@ -83,8 +83,12 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
     val query by model.query.collectAsState()
     val category by model.category.collectAsState()
     val pages = model.pages.collectAsLazyPagingItems()
-    val pinned =
-        (0 until minOf(2, pages.itemCount)).mapNotNull { pages.peek(it) }.takeWhile { it.pinned }
+    val pinned = emptyList<ItemSummary>()
+    val browsing by model.folderBrowsing.collectAsState()
+    val parent by model.folderId.collectAsState()
+    var chosen by remember(parent, category, query) { mutableStateOf(setOf<String>()) }
+    var movingFiles by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ItemSummary?>(null) }
     var lastFilter by remember { mutableStateOf(category to query) }
     LaunchedEffect(category, query) {
@@ -95,25 +99,52 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
         }
     }
     val filters =
-        listOf("all" to "All", "notes" to "Notes", "documents" to "Documents", "media" to "Media")
+        listOf(
+            "all" to "All",
+            "notes" to "Notes",
+            "images" to "Images",
+            "videos" to "Videos",
+            "audio" to "Audio",
+            "pdf" to "PDFs",
+            "epub" to "EPUB",
+            "documents" to "Files",
+        )
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(145.dp),
+        columns =
+            if (category in setOf("images", "videos")) GridCells.Adaptive(140.dp)
+            else GridCells.Fixed(1),
         state = state,
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 96.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize().testTag("vault-library"),
     ) {
         item(key = "heading", span = { GridItemSpan(maxLineSpan) }) {
-            Column(Modifier.padding(top = 12.dp, bottom = 4.dp)) {
+            Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                if (browsing) FolderPanel(model)
+                Row {
+                    TextButton({
+                        selecting = !selecting
+                        chosen = emptySet()
+                    }) {
+                        Text(if (selecting) "Done selecting" else "Select items")
+                    }
+                }
+                if (chosen.isNotEmpty())
+                    Row {
+                        Text("${chosen.size} selected", Modifier.weight(1f).padding(12.dp))
+                        TextButton({ movingFiles = true }) { Text("Move") }
+                        TextButton({ chosen = emptySet() }) { Text("Clear") }
+                    }
+
                 Text(
                     when (category) {
-                        "notes" -> "A place for your thoughts."
-                        "documents" -> "The important details."
-                        "media" -> "Moments worth keeping."
-                        else -> "Everything, safely kept."
+                        "notes" -> "Notes"
+                        "documents" -> "Files"
+                        "media" -> "Media"
+                        else -> if (browsing) "Folder contents" else "Vault"
                     },
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -123,7 +154,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Paper.Muted,
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = query,
                     onValueChange = {
@@ -156,13 +187,13 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                             unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
                         ),
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     filters.forEach { (key, label) ->
                         Column(
                             Modifier.width(if (key == "documents") 104.dp else 72.dp)
                                 .clickable { model.showLibrary(key) }
-                                .padding(top = 12.dp),
+                                .padding(top = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
@@ -192,7 +223,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                             .clickable { model.navigate(pinnedItem.id) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         PaperFileBadge(pinnedItem.mime, name = pinnedItem.name)
                         Column(Modifier.weight(1f)) {
@@ -219,7 +250,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
         }
         if (pages.itemCount > pinned.size) {
             item(key = "recent-label", span = { GridItemSpan(maxLineSpan) }) {
-                SectionLabel(if (query.isBlank()) "Recent" else "Results")
+                SectionLabel(if (query.isBlank()) "Items · pinned first" else "Results")
             }
         }
         items(
@@ -234,7 +265,19 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                         .clip(RoundedCornerShape(12.dp))
                         .background(Paper.Inset)
                 )
-            else PaperItemCard(model, item, { deleting = item })
+            else
+                Column {
+                    Row {
+                        if (selecting)
+                            Checkbox(
+                                item.id in chosen,
+                                { checked ->
+                                    chosen = if (checked) chosen + item.id else chosen - item.id
+                                },
+                            )
+                        Box(Modifier.weight(1f)) { PaperItemCard(model, item, { deleting = item }) }
+                    }
+                }
         }
         if (pages.loadState.refresh is LoadState.Loading) {
             item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
@@ -284,6 +327,11 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
             }
         }
     }
+    if (movingFiles)
+        FolderPicker(model, { movingFiles = false }) { destination ->
+            model.moveFiles(chosen.toList(), destination)
+            chosen = emptySet()
+        }
     deleting?.let { item ->
         ConfirmPaperDelete(item.name, { deleting = null }) {
             deleting = null
@@ -321,7 +369,7 @@ private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> 
     }
     Card(
         onClick = { model.navigate(item.id) },
-        modifier = Modifier.fillMaxWidth().heightIn(min = 188.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Paper.Surface),
         border = BorderStroke(1.dp, Paper.Line.copy(alpha = 0.7f)),
@@ -333,7 +381,8 @@ private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> 
             Text(
                 item.name,
                 style =
-                    if (item.mime == "application/x-securenote") MaterialTheme.typography.titleLarge
+                    if (item.mime == "application/x-securenote")
+                        MaterialTheme.typography.titleMedium
                     else MaterialTheme.typography.titleSmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -343,7 +392,7 @@ private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> 
                     snippet.ifBlank { "Empty note" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Paper.Muted,
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -354,6 +403,8 @@ private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> 
                     color = Paper.Muted,
                     modifier = Modifier.weight(1f),
                 )
+                if (item.pinned)
+                    PaperIcon(PaperGlyph.Pin, "Pinned", modifier = Modifier.size(16.dp))
                 FileMenu(item, { model.pin(item.id) }, onDelete)
             }
         }

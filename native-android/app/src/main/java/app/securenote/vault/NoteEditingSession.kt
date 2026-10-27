@@ -133,9 +133,57 @@ internal class NoteEditingSession {
 }
 
 /** One native Editable per visible block. Toolbar commands mutate spans without setText(). */
+internal enum class FormatState {
+    Off,
+    On,
+    Mixed,
+}
+
 internal class NoteEditText(context: Context) : SecureEditText(context) {
     var onEdit: ((SpannedString) -> Unit)? = null
     var onActive: ((NoteEditText) -> Unit)? = null
+    var onSelection: (() -> Unit)? = null
+
+    override fun onSelectionChanged(start: Int, end: Int) {
+        super.onSelectionChanged(start, end)
+        onSelection?.invoke()
+    }
+
+    fun formatState(kind: String): FormatState {
+        val value = text ?: return FormatState.Off
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, value.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(start, value.length)
+        if (kind == "list") {
+            val first = value.toString().lastIndexOf('\n', start - 1) + 1
+            val starts =
+                listOf(first) +
+                    (first until end).filter { value[it] == '\n' && it + 1 < end }.map { it + 1 }
+            val n = starts.count { value.substring(it).startsWith("• ") }
+            return if (n == 0) FormatState.Off
+            else if (n == starts.size) FormatState.On else FormatState.Mixed
+        }
+        val spans =
+            value.getSpans(0, value.length, Any::class.java).filter {
+                when (kind) {
+                    "bold" -> it is StyleSpan && it.style and Typeface.BOLD != 0
+                    "italic" -> it is StyleSpan && it.style and Typeface.ITALIC != 0
+                    else -> it is UnderlineSpan
+                }
+            }
+        val ranges =
+            spans
+                .map { value.getSpanStart(it) to value.getSpanEnd(it) }
+                .filter { (a, b) ->
+                    if (start == end) a <= start && b >= start else a < end && b > start
+                }
+                .sortedBy { it.first }
+        if (ranges.isEmpty()) return FormatState.Off
+        if (start == end) return FormatState.On
+        var covered = start
+        for ((a, b) in ranges) if (a <= covered) covered = maxOf(covered, b)
+        return if (covered >= end) FormatState.On else FormatState.Mixed
+    }
+
     private var silent = false
     private var disposed = false
     private var newline = -1
@@ -196,6 +244,7 @@ internal class NoteEditText(context: Context) : SecureEditText(context) {
     private fun emit() {
         if (disposed) return
         revision++
+        onSelection?.invoke()
         onEdit?.invoke(NoteEditingSession.snapshot(text))
     }
 
@@ -312,6 +361,7 @@ internal class NoteEditText(context: Context) : SecureEditText(context) {
         disposed = true
         onEdit = null
         onActive = null
+        onSelection = null
         removeTextChangedListener(watcher)
         setOnFocusChangeListener(null)
         clearFocus()

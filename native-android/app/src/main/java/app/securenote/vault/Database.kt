@@ -98,18 +98,179 @@ data class ItemSummary(
     val pinned: Boolean,
 )
 
+@Entity(
+    tableName = "folders",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = VaultFolder::class,
+                parentColumns = ["id"],
+                childColumns = ["parentId"],
+                onDelete = ForeignKey.RESTRICT,
+            )
+        ],
+    indices = [Index("parentId")],
+)
+data class VaultFolder(
+    @PrimaryKey val id: String,
+    val parentId: String?,
+    val name: String,
+    val normalizedName: String,
+    val color: Int = 0,
+)
+
+@Entity(
+    tableName = "folder_items",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = VaultItem::class,
+                parentColumns = ["id"],
+                childColumns = ["itemId"],
+                onDelete = ForeignKey.CASCADE,
+            ),
+            ForeignKey(
+                entity = VaultFolder::class,
+                parentColumns = ["id"],
+                childColumns = ["folderId"],
+                onDelete = ForeignKey.RESTRICT,
+            ),
+        ],
+    indices = [Index("folderId")],
+)
+data class FolderItem(@PrimaryKey val itemId: String, val folderId: String)
+
+@Entity(tableName = "import_jobs")
+data class FolderImportJob(
+    @PrimaryKey val id: String,
+    val source: String,
+    val destination: String?,
+    val completed: Int = 0,
+    val failed: Int = 0,
+)
+
+@Entity(
+    tableName = "import_entries",
+    primaryKeys = ["jobId", "sourceId"],
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = FolderImportJob::class,
+                parentColumns = ["id"],
+                childColumns = ["jobId"],
+                onDelete = ForeignKey.CASCADE,
+            )
+        ],
+)
+data class FolderImportEntry(
+    val jobId: String,
+    val sourceId: String,
+    val vaultId: String,
+    val signature: String,
+)
+
 @Dao
 @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
 interface Items {
-    @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%'))) ORDER BY pinned DESC,updated DESC,rowId DESC"
-    )
-    fun pages(category: String = "all"): PagingSource<Int, ItemSummary>
+    @Query("SELECT * FROM folders WHERE parentId IS :parent ORDER BY normalizedName,id")
+    fun folders(parent: String?): Flow<List<VaultFolder>>
+
+    @Query("SELECT * FROM folders ORDER BY normalizedName,id")
+    fun allFolders(): Flow<List<VaultFolder>>
+
+    @Query("SELECT * FROM folders WHERE id=:id") suspend fun folder(id: String): VaultFolder?
 
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%'))) AND rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC,updated DESC,rowId DESC"
+        "SELECT * FROM folders WHERE parentId IS :parent AND normalizedName=:name AND id != :exceptId LIMIT 1"
     )
-    fun search(query: String, category: String = "all"): PagingSource<Int, ItemSummary>
+    suspend fun sibling(parent: String?, name: String, exceptId: String = ""): VaultFolder?
+
+    @Upsert suspend fun putFolder(folder: VaultFolder)
+
+    @Query("DELETE FROM folders WHERE id=:id") suspend fun deleteFolder(id: String)
+
+    @Upsert suspend fun putMembership(value: FolderItem)
+
+    @Query("DELETE FROM folder_items WHERE itemId=:id") suspend fun unfile(id: String)
+
+    @Query("SELECT itemId FROM folder_items WHERE folderId=:folder")
+    suspend fun members(folder: String): List<String>
+
+    @Query("SELECT * FROM folders WHERE parentId=:parent")
+    suspend fun childFolders(parent: String): List<VaultFolder>
+
+    @Query("SELECT * FROM import_jobs") fun importJobs(): Flow<List<FolderImportJob>>
+
+    @Query("SELECT * FROM import_jobs WHERE id=:id")
+    suspend fun importJob(id: String): FolderImportJob?
+
+    @Upsert suspend fun putImportJob(job: FolderImportJob)
+
+    @Query("DELETE FROM import_jobs WHERE id=:id") suspend fun deleteImportJob(id: String)
+
+    @Query("SELECT * FROM import_entries WHERE jobId=:job AND sourceId=:source")
+    suspend fun importEntry(job: String, source: String): FolderImportEntry?
+
+    @Upsert suspend fun putImportEntry(entry: FolderImportEntry)
+
+    @Transaction
+    suspend fun moveItems(ids: List<String>, destination: String?) {
+        require(destination == null || folder(destination) != null) {
+            "Destination folder is unavailable"
+        }
+        ids.forEach { id ->
+            require(display(id) != null)
+            if (destination == null) unfile(id) else putMembership(FolderItem(id, destination))
+        }
+    }
+
+    @Transaction
+    suspend fun saveFolder(value: VaultFolder) {
+        require(value.name.isNotBlank() && value.name.length <= 100)
+        var parent = value.parentId
+        val visited = mutableSetOf(value.id)
+        while (parent != null) {
+            require(visited.add(parent)) { "A folder cannot contain itself" }
+            parent = checkNotNull(folder(parent)) { "Parent folder unavailable" }.parentId
+        }
+        require(sibling(value.parentId, value.normalizedName, value.id) == null) {
+            "A folder with that name already exists"
+        }
+        putFolder(value)
+    }
+
+    @Transaction
+    suspend fun dissolveFolder(id: String) {
+        val current = checkNotNull(folder(id))
+        val children = childFolders(id)
+        children.forEach {
+            require(sibling(current.parentId, it.normalizedName, it.id) == null) {
+                "Rename conflicting child folders first"
+            }
+        }
+        children.forEach { putFolder(it.copy(parentId = current.parentId)) }
+        moveItems(members(id), current.parentId)
+        deleteFolder(id)
+    }
+
+    @Query(
+        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) ORDER BY pinned DESC,updated DESC,rowId DESC"
+    )
+    fun pages(
+        category: String = "all",
+        folder: String? = null,
+        scoped: Boolean = false,
+    ): PagingSource<Int, ItemSummary>
+
+    @Query(
+        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) AND rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC,updated DESC,rowId DESC"
+    )
+    fun search(
+        query: String,
+        category: String = "all",
+        folder: String? = null,
+        scoped: Boolean = false,
+    ): PagingSource<Int, ItemSummary>
 
     @Query("SELECT fileKey FROM items WHERE id=:id") suspend fun objectKey(id: String): ByteArray?
 
@@ -262,8 +423,12 @@ interface Items {
             NoteBlock::class,
             Preview::class,
             DrawingStrokeRow::class,
+            VaultFolder::class,
+            FolderItem::class,
+            FolderImportJob::class,
+            FolderImportEntry::class,
         ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class VaultDatabase : RoomDatabase() {

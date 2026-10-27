@@ -318,6 +318,7 @@ internal fun DrawingBlock(
                 val current = remember(block.id) { LiveDrawingStroke() }
                 var color by remember(block.id) { mutableIntStateOf(android.graphics.Color.BLACK) }
                 var thickness by remember(block.id) { mutableFloatStateOf(4f) }
+                var properties by remember { mutableStateOf(false) }
                 var customColor by remember { mutableStateOf(false) }
                 var hex by remember { mutableStateOf("") }
                 var opacity by remember { mutableFloatStateOf(1f) }
@@ -337,55 +338,74 @@ internal fun DrawingBlock(
                 val strokes = drawing.strokes
                 val pathCache = remember { StrokePathCache() }
                 val paths = remember(strokes, dimensions) { pathCache.resolve(strokes, dimensions) }
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf(
-                            "Black" to android.graphics.Color.BLACK,
-                            "Red" to android.graphics.Color.RED,
-                            "Blue" to android.graphics.Color.BLUE,
-                            "Green" to android.graphics.Color.rgb(0, 130, 80),
-                        )
-                        .forEach { (name, value) ->
-                            TextButton(
-                                {
-                                    color = value
-                                    erasing = false
-                                },
-                                modifier =
-                                    Modifier.semantics {
-                                        contentDescription = "$name pen"
-                                    },
-                            ) {
-                                Text(
-                                    if (color == value && !erasing) "●" else "○",
-                                    color = Color(value),
-                                )
-                            }
-                        }
-                    TextButton({ customColor = true }) { Text("Custom color") }
-                    TextButton({ if (drawing.redo()) save() }, enabled = drawing.canRedo) {
-                        Text("Redo")
-                    }
-                    TextButton({
-                        erasing = !erasing
-                        navigating = false
-                    }) {
-                        Text(if (erasing) "Eraser on" else "Eraser")
+                Row {
+                    TextButton({ properties = !properties }) {
+                        Text(if (properties) "Hide properties" else "Color & stroke")
                     }
                     TextButton({ if (drawing.undo()) save() }, enabled = drawing.canUndo) {
                         Text("Undo")
                     }
-                    TextButton(
-                        {
-                            val before = drawing.strokes
-                            drawing.strokes = emptyList()
-                            if (drawing.commit(before)) save()
-                        },
-                        enabled = drawing.strokes.isNotEmpty(),
-                    ) {
-                        Text("Clear")
+                    TextButton({ if (drawing.redo()) save() }, enabled = drawing.canRedo) {
+                        Text("Redo")
                     }
                 }
+                if (properties)
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf(
+                                "Black" to android.graphics.Color.BLACK,
+                                "Red" to android.graphics.Color.RED,
+                                "Blue" to android.graphics.Color.BLUE,
+                                "Green" to android.graphics.Color.rgb(0, 130, 80),
+                            )
+                            .forEach { (name, value) ->
+                                TextButton(
+                                    {
+                                        color = value
+                                        erasing = false
+                                        navigating = false
+                                    },
+                                    modifier =
+                                        Modifier.semantics {
+                                            contentDescription = "$name pen"
+                                        },
+                                ) {
+                                    Text(
+                                        if (color == value && !erasing) "●" else "○",
+                                        color = Color(value),
+                                    )
+                                }
+                            }
+                        TextButton({ customColor = true }) { Text("Custom color") }
+                        TextButton({ if (drawing.redo()) save() }, enabled = drawing.canRedo) {
+                            Text("Redo")
+                        }
+                        TextButton({
+                            erasing = !erasing
+                            navigating = false
+                        }) {
+                            Text(if (erasing) "Eraser on" else "Eraser")
+                        }
+                        TextButton({ if (drawing.undo()) save() }, enabled = drawing.canUndo) {
+                            Text("Undo")
+                        }
+                        TextButton(
+                            {
+                                val before = drawing.strokes
+                                drawing.strokes = emptyList()
+                                if (drawing.commit(before)) save()
+                            },
+                            enabled = drawing.strokes.isNotEmpty(),
+                        ) {
+                            Text("Clear")
+                        }
+                    }
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    TextButton({
+                        erasing = !erasing
+                        navigating = false
+                    }) {
+                        Text(if (erasing) "✓ Eraser" else "Eraser")
+                    }
                     listOf("Pen", "Highlighter", "Line").forEach { name ->
                         TextButton({
                             tool = name
@@ -396,7 +416,10 @@ internal fun DrawingBlock(
                             Text(if (tool == name && !erasing && !navigating) "✓ $name" else name)
                         }
                     }
-                    TextButton({ navigating = !navigating }) {
+                    TextButton({
+                        navigating = !navigating
+                        erasing = false
+                    }) {
                         Text(if (navigating) "Navigate ✓" else "Navigate")
                     }
                     TextButton({
@@ -436,6 +459,7 @@ internal fun DrawingBlock(
                                     color = android.graphics.Color.parseColor(hex)
                                     erasing = false
                                     customColor = false
+                                    navigating = false
                                     hex = ""
                                 },
                                 enabled = hex.matches(Regex("#[0-9a-fA-F]{6}")),
@@ -452,15 +476,17 @@ internal fun DrawingBlock(
                             }
                         },
                     )
-                Text("Width", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    thickness,
-                    { thickness = it },
-                    valueRange = 1f..12f,
-                    modifier = Modifier.semantics { contentDescription = "Pen width" },
-                )
-                Text("Opacity", style = MaterialTheme.typography.labelSmall)
-                Slider(opacity, { opacity = it }, valueRange = 0.1f..1f)
+                if (properties) {
+                    Text("Width", style = MaterialTheme.typography.labelSmall)
+                    Slider(
+                        thickness,
+                        { thickness = it },
+                        valueRange = 1f..12f,
+                        modifier = Modifier.semantics { contentDescription = "Pen width" },
+                    )
+                    Text("Opacity", style = MaterialTheme.typography.labelSmall)
+                    Slider(opacity, { opacity = it }, valueRange = 0.1f..1f)
+                }
                 Text(
                     if (navigating) "Pinch to zoom · drag to pan"
                     else "Draw with one finger · choose Navigate to zoom",

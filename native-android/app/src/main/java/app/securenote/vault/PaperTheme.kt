@@ -27,7 +27,7 @@ object Paper {
     val Surface = Color(0xFFFFFCF6)
     val Inset = Color(0xFFEDE7DC)
     val Ink = Color(0xFF272B28)
-    val Muted = Color(0xFF736E65)
+    val Muted = Color(0xFF686359)
     val Line = Color(0xFFDED7CA)
     val Accent = Color(0xFFA9513F)
     val AccentSoft = Color(0xFFF3DFD5)
@@ -41,7 +41,7 @@ fun PaperTheme(content: @Composable () -> Unit) {
             primary = Paper.Accent,
             onPrimary = Color.White,
             primaryContainer = Paper.AccentSoft,
-            onPrimaryContainer = Paper.Accent,
+            onPrimaryContainer = Paper.Ink,
             secondary = Paper.Muted,
             onSecondary = Color.White,
             secondaryContainer = Paper.Inset,

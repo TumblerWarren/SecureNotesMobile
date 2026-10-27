@@ -29,6 +29,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontFamily
@@ -113,6 +116,7 @@ private fun VaultApp(model: VaultModel) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     val message by model.message.collectAsState()
+    val messageSuccess by model.messageSuccess.collectAsState()
     val selected by model.screen.collectAsState()
     val status by model.status.collectAsState()
     val category by model.category.collectAsState()
@@ -129,6 +133,21 @@ private fun VaultApp(model: VaultModel) {
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
             model.importUris(it)
+        }
+    val treePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) {
+                try {
+                    model
+                        .getApplication<android.app.Application>()
+                        .contentResolver
+                        .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    model.importTree(uri)
+                } catch (e: Exception) {
+                    model.message.value =
+                        "Folder permission could not be retained. Select the folder again."
+                }
+            }
         }
     val oldPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
@@ -162,7 +181,7 @@ private fun VaultApp(model: VaultModel) {
         if (!open || recovery != null || selected == null) {
             Row(
                 Modifier.fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
                     .heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -192,8 +211,13 @@ private fun VaultApp(model: VaultModel) {
             )
         if (message.isNotEmpty()) {
             Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                color =
+                    if (messageSuccess) Paper.AccentSoft
+                    else MaterialTheme.colorScheme.errorContainer,
+                modifier =
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics {
+                        liveRegion = LiveRegionMode.Polite
+                    },
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Row(
@@ -304,19 +328,30 @@ private fun VaultApp(model: VaultModel) {
                     listOf(
                             Triple("all", "Vault", PaperGlyph.Vault),
                             Triple("notes", "Notes", PaperGlyph.Note),
-                            Triple("media", "Media", PaperGlyph.Media),
+                            Triple("folders", "Folders", PaperGlyph.Vault),
                             Triple("settings", "Settings", PaperGlyph.Settings),
                         )
                         .forEach { (key, label, glyph) ->
                             val active =
-                                if (key == "all") category == "all" || category == "documents"
+                                if (key == "all")
+                                    !model.folderBrowsing.collectAsState().value &&
+                                        category == "all"
+                                else if (key == "folders")
+                                    model.folderBrowsing.collectAsState().value
                                 else category == key
                             TextButton(
                                 {
                                     if (key == "settings") settings = true
-                                    else model.showLibrary(key)
+                                    else if (key == "folders") model.openFolder(null)
+                                    else {
+                                        model.folderBrowsing.value = false
+                                        model.showLibrary(key)
+                                    }
                                 },
-                                modifier = Modifier.weight(1f).testTag("nav-$key"),
+                                modifier =
+                                    Modifier.weight(1f).testTag("nav-$key").semantics {
+                                        selected = active
+                                    },
                                 contentPadding = PaddingValues(vertical = 8.dp, horizontal = 0.dp),
                             ) {
                                 Column(
@@ -370,6 +405,7 @@ private fun VaultApp(model: VaultModel) {
                         TextButton(
                             {
                                 adding = false
+                                model.prepareImport()
                                 picker.launch(arrayOf("*/*"))
                             },
                             enabled = !busy,
@@ -380,6 +416,17 @@ private fun VaultApp(model: VaultModel) {
                             Spacer(Modifier.width(12.dp))
                             Text("Import files", modifier = Modifier.weight(1f))
                             PaperIcon(PaperGlyph.Next)
+                        }
+                        TextButton(
+                            {
+                                adding = false
+                                model.prepareImport()
+                                treePicker.launch(null)
+                            },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Import folder")
                         }
                         Text(
                             "Imports create encrypted copies. Your originals stay where they are.",
@@ -397,6 +444,16 @@ private fun VaultApp(model: VaultModel) {
                 {
                     settings = false
                     oldPicker.launch(arrayOf("*/*"))
+                },
+                {
+                    settings = false
+                    model.prepareImport()
+                    picker.launch(arrayOf("*/*"))
+                },
+                {
+                    settings = false
+                    model.prepareImport()
+                    treePicker.launch(null)
                 },
             )
         if (legacySource != null) LegacyPasswordDialog(model)
@@ -560,7 +617,6 @@ private fun ItemScreen(model: VaultModel, id: String) {
             }) {
                 PaperIcon(PaperGlyph.Back)
                 Spacer(Modifier.width(4.dp))
-                Text("Back")
             }
             Text(
                 if (item?.mime == "application/x-securenote") "Notes" else item?.name.orEmpty(),
