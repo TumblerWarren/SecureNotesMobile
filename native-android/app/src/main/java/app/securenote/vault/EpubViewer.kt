@@ -339,7 +339,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                     )
                 }
             else
-                Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(16.dp)) {
+                Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(PaperSpacing.Screen)) {
                     val current = frame
                     if (current != null)
                         AndroidView(

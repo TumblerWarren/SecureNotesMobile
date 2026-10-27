@@ -34,6 +34,12 @@ object Paper {
     val Media = Color(0xFF252826)
 }
 
+object PaperSpacing {
+    val Screen = 16.dp
+    val Block = 8.dp
+    val Section = 24.dp
+}
+
 @Composable
 fun PaperTheme(content: @Composable () -> Unit) {
     val colors =

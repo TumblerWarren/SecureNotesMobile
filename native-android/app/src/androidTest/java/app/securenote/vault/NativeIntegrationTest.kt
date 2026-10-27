@@ -54,14 +54,6 @@ class NativeIntegrationTest {
                     decoded.recycle()
                 }
                 // A native consumer retains its descriptor after the password session ends.
-                val tile = client.render(0, 1024, 512, 512)
-                try {
-                    assertEquals(512, tile.width)
-                    assertEquals(512, tile.height)
-                    assertEquals(Color.RED, tile.getPixel(128, 384))
-                } finally {
-                    tile.recycle()
-                }
                 store.revoke()
                 var rejected = false
                 try {
@@ -111,6 +103,14 @@ class NativeIntegrationTest {
                     assertEquals(384, page.height)
                 } finally {
                     page.recycle()
+                }
+                val tile = client.render(0, 1024, 512, 512)
+                try {
+                    assertEquals(512, tile.width)
+                    assertEquals(512, tile.height)
+                    assertEquals(Color.RED, tile.getPixel(128, 384))
+                } finally {
+                    tile.recycle()
                 }
                 store.revoke()
                 var rejected = false

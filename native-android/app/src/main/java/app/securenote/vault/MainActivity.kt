@@ -798,7 +798,7 @@ private fun MediaViewer(model: VaultModel, id: String, item: VaultItem) {
             Text(
                 playbackError,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(PaperSpacing.Screen),
             )
         AndroidView(
             factory = {
@@ -869,7 +869,7 @@ private fun ImageViewer(model: VaultModel, id: String) {
         }
         if (state == "loading") CircularProgressIndicator(Modifier.align(Alignment.Center))
         if (state == "error")
-            Column(Modifier.align(Alignment.Center).background(Paper.Background).padding(16.dp)) {
+            Column(Modifier.align(Alignment.Center).background(Paper.Background).padding(PaperSpacing.Screen)) {
                 TextButton({ imageAttempt++ }) { Text("Retry image") }
                 Text(
                     "Image preview unavailable. The encrypted file is kept.",
@@ -919,7 +919,7 @@ private fun TextViewer(model: VaultModel, id: String) {
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(16.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(PaperSpacing.Screen),
         )
         HorizontalDivider(color = Paper.Line)
         Row(

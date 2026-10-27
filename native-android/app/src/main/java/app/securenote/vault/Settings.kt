@@ -75,7 +75,7 @@ fun SettingsDialog(
                     Modifier.weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
+                        .padding(PaperSpacing.Screen)
                 ) {
                     if (changing) {
                         Text("Use a passphrase of at least 16 characters.", color = Paper.Muted)

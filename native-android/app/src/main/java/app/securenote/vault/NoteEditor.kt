@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -383,11 +385,13 @@ internal fun PaperEditorTool(
     state: FormatState = FormatState.Off,
     action: () -> Unit,
 ) {
+    val showLabel = LocalDensity.current.fontScale <= 1.3f
     TextButton(
         action,
         enabled = enabled,
         modifier =
             Modifier.widthIn(min = 48.dp).semantics {
+                if (!showLabel) contentDescription = label
                 selected = state == FormatState.On
                 stateDescription = if (!enabled) "Unavailable" else state.name
             },
@@ -411,7 +415,7 @@ internal fun PaperEditorTool(
                 Text(
                     letter.orEmpty(),
                     fontFamily = FontFamily.Serif,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontStyle =
                         if (label == "Italic") androidx.compose.ui.text.font.FontStyle.Italic
                         else androidx.compose.ui.text.font.FontStyle.Normal,
@@ -420,11 +424,12 @@ internal fun PaperEditorTool(
                         else androidx.compose.ui.text.font.FontWeight.Normal,
                     color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = 0.38f),
                 )
-            Text(
-                if (state == FormatState.Mixed) "$label −" else label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (enabled) Paper.Muted else Paper.Muted.copy(alpha = 0.38f),
-            )
+            if (showLabel)
+                Text(
+                    if (state == FormatState.Mixed) "$label −" else label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (enabled) Paper.Muted else Paper.Muted.copy(alpha = 0.38f),
+                )
         }
     }
 }

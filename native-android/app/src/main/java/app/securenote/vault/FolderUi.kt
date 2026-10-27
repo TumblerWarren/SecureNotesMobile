@@ -57,6 +57,7 @@ internal fun FolderPanel(model: VaultModel) {
     val children by remember(parent) { model.store.dao.folders(parent) }.collectAsState(emptyList())
     val jobs by remember { model.store.dao.importJobs() }.collectAsState(emptyList())
     val busy by model.busy.collectAsState()
+    val query by model.query.collectAsState()
     var title by remember { mutableStateOf("Unfiled") }
     var editing by remember { mutableStateOf(false) }
     var editFolder by remember { mutableStateOf<VaultFolder?>(null) }
@@ -141,13 +142,14 @@ internal fun FolderPanel(model: VaultModel) {
                 }
             }
         }
-        TextButton({
-            model.folderBrowsing.value = false
-            model.folderId.value = null
-            model.showLibrary("all")
-        }) {
-            Text("Search entire vault")
-        }
+        if (query.isNotBlank())
+            TextButton({
+                model.folderBrowsing.value = false
+                model.folderId.value = null
+                model.showLibrary("all")
+            }) {
+                Text("Search entire vault")
+            }
         jobs.forEach { job ->
             Row {
                 Text(
