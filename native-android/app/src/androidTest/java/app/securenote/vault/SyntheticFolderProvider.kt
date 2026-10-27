@@ -1,15 +1,50 @@
 package app.securenote.vault
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.database.Cursor
 import android.database.MatrixCursor
+import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract.Document
-import android.provider.DocumentsProvider
 import java.io.FileNotFoundException
 
 /** Fixed synthetic hierarchy only; packaged exclusively in the instrumentation APK. */
-class SyntheticFolderProvider : DocumentsProvider() {
+class SyntheticFolderProvider : ContentProvider() {
+    override fun query(
+        uri: Uri,
+        projection: Array<out String>?,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+        sortOrder: String?,
+    ): Cursor {
+        val parts = uri.pathSegments
+        return if (parts.lastOrNull() == "children")
+            queryChildDocuments(parts[parts.size - 2], projection, sortOrder)
+        else queryDocument(parts.last(), projection)
+    }
+
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor =
+        openDocument(uri.lastPathSegment!!, mode, null)
+
+    override fun getType(uri: Uri): String =
+        if (uri.lastPathSegment in listOf("root", "photos")) Document.MIME_TYPE_DIR
+        else "application/octet-stream"
+
+    override fun insert(uri: Uri, values: ContentValues?): Uri? =
+        throw UnsupportedOperationException()
+
+    override fun update(
+        uri: Uri,
+        values: ContentValues?,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+    ): Int = throw UnsupportedOperationException()
+
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int =
+        throw UnsupportedOperationException()
+
     override fun onCreate() = true
 
     private val columns =
@@ -51,15 +86,15 @@ class SyntheticFolderProvider : DocumentsProvider() {
 
     private fun payload(id: String) = "Synthetic encrypted $id".toByteArray()
 
-    override fun queryRoots(projection: Array<out String>?): Cursor =
+    fun queryRoots(projection: Array<out String>?): Cursor =
         MatrixCursor(arrayOf("root_id", "document_id", "title", "flags")).apply {
             addRow(arrayOf("root", "root", "Synthetic", 0))
         }
 
-    override fun queryDocument(documentId: String, projection: Array<out String>?) =
+    fun queryDocument(documentId: String, projection: Array<out String>?) =
         cursor(listOf(documentId), projection)
 
-    override fun queryChildDocuments(
+    fun queryChildDocuments(
         parentDocumentId: String,
         projection: Array<out String>?,
         sortOrder: String?,
@@ -70,11 +105,11 @@ class SyntheticFolderProvider : DocumentsProvider() {
             projection,
         )
 
-    override fun isChildDocument(parentDocumentId: String, documentId: String) =
+    fun isChildDocument(parentDocumentId: String, documentId: String) =
         parentDocumentId == "root" ||
             parentDocumentId == "photos" && documentId in listOf("photo.jpg", "clip.mp4")
 
-    override fun openDocument(
+    fun openDocument(
         documentId: String,
         mode: String,
         signal: CancellationSignal?,
@@ -83,12 +118,12 @@ class SyntheticFolderProvider : DocumentsProvider() {
         require(mode == "r")
         val pipe = ParcelFileDescriptor.createPipe()
         Thread {
-                runCatching {
-                    ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]).use {
-                        it.write(payload(documentId))
-                    }
+            runCatching {
+                ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]).use {
+                    it.write(payload(documentId))
                 }
             }
+        }
             .start()
         return pipe[0]
     }

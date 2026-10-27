@@ -143,7 +143,8 @@ class UiRoundTripTest {
             .check(matches(isDisplayed()))
             .perform(androidx.test.espresso.action.ViewActions.click())
         rule.waitUntil(15000) { model.playing }
-        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        // Pause alone must revoke the session, before the activity stops.
+        rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
         org.junit.Assert.assertFalse(model.unlocked.value)
         org.junit.Assert.assertFalse(model.playing)
         rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)

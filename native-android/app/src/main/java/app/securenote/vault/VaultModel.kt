@@ -11,8 +11,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class VaultModel(app: Application) : AndroidViewModel(app) {
-    val store = VaultStore(app)
+class VaultModel internal constructor(app: Application, val store: VaultStore) :
+    AndroidViewModel(app) {
+    constructor(app: Application) : this(app, VaultStore(app))
+
     val previews = Previews(app, store)
     val unlocked = MutableStateFlow(false)
     val busy = MutableStateFlow(false)

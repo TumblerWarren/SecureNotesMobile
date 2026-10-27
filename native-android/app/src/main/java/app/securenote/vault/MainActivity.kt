@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun VaultApp(model: VaultModel) {
+internal fun VaultApp(model: VaultModel) {
     val open by model.unlocked.collectAsState()
     val busy by model.busy.collectAsState()
     val libraryState = key(open) { rememberLazyGridState() }
