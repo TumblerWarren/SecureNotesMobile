@@ -300,6 +300,7 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             s.check()
             val key = Crypto.fileKey()
             var id: String? = null
+            var published = false
             try {
                 val (result, length) =
                     input.use {
@@ -316,23 +317,26 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
                     Os.close(fd)
                 }
                 s.check()
-                transaction {
-                    dao.insert(
-                        VaultItem(
-                            id = result,
-                            name = name.take(255),
-                            mime = mime,
-                            size = length,
-                            updated = System.currentTimeMillis(),
-                            fileKey = key,
+                withContext(NonCancellable) {
+                    transaction {
+                        dao.insert(
+                            VaultItem(
+                                id = result,
+                                name = name.take(255),
+                                mime = mime,
+                                size = length,
+                                updated = System.currentTimeMillis(),
+                                fileKey = key,
+                            )
                         )
-                    )
-                    dao.moveItems(listOf(result), folder)
-                    dao.checkpoint(result)
+                        dao.moveItems(listOf(result), folder)
+                        dao.checkpoint(result)
+                    }
+                    published = true
                 }
                 result
             } catch (e: Exception) {
-                id?.let { objects?.delete(it) }
+                if (!published) id?.let { objects?.delete(it) }
                 throw e
             } finally {
                 key.fill(0)

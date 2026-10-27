@@ -96,6 +96,7 @@ data class ItemSummary(
     val size: Long,
     val updated: Long,
     val pinned: Boolean,
+    val folderName: String? = null,
 )
 
 @Entity(
@@ -254,7 +255,7 @@ interface Items {
     }
 
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC"
+        "SELECT rowId,id,name,mime,size,updated,pinned,(SELECT name FROM folders WHERE id=(SELECT folderId FROM folder_items WHERE itemId=items.id)) AS folderName FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC"
     )
     fun pages(
         category: String = "all",
@@ -264,7 +265,7 @@ interface Items {
     ): PagingSource<Int, ItemSummary>
 
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) AND rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC"
+        "SELECT rowId,id,name,mime,size,updated,pinned,(SELECT name FROM folders WHERE id=(SELECT folderId FROM folder_items WHERE itemId=items.id)) AS folderName FROM items WHERE (:scoped=0 OR (:folder IS NULL AND id NOT IN (SELECT itemId FROM folder_items)) OR id IN (SELECT itemId FROM folder_items WHERE folderId=:folder)) AND (:category='all' OR (:category='notes' AND mime='application/x-securenote') OR (:category='documents' AND mime!='application/x-securenote' AND mime NOT LIKE 'image/%' AND mime NOT LIKE 'audio/%' AND mime NOT LIKE 'video/%') OR (:category='media' AND (mime LIKE 'image/%' OR mime LIKE 'audio/%' OR mime LIKE 'video/%')) OR (:category='images' AND mime LIKE 'image/%') OR (:category='videos' AND mime LIKE 'video/%') OR (:category='audio' AND mime LIKE 'audio/%') OR (:category='pdf' AND mime='application/pdf') OR (:category='epub' AND (mime='application/epub+zip' OR name LIKE '%.epub'))) AND rowId IN (SELECT rowid FROM item_search WHERE item_search MATCH :query) ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC"
     )
     fun search(
         query: String,
@@ -319,9 +320,9 @@ interface Items {
     @Query("SELECT count(*) FROM items WHERE id=:id") suspend fun contains(id: String): Int
 
     @Query(
-        "SELECT rowId,id,name,mime,size,updated,pinned FROM items ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC LIMIT 50"
+        "SELECT rowId,id,name,mime,size,updated,pinned,(SELECT name FROM folders WHERE id=(SELECT folderId FROM folder_items WHERE itemId=items.id)) AS folderName FROM items ORDER BY pinned DESC, CASE WHEN :sort='name' THEN name COLLATE NOCASE END ASC, CASE WHEN :sort='size' THEN size END DESC,updated DESC,rowId DESC LIMIT 50"
     )
-    suspend fun firstPage(): List<ItemSummary>
+    suspend fun firstPage(sort: String = "modified"): List<ItemSummary>
 
     @Query("SELECT * FROM blocks WHERE noteId=:id ORDER BY position,id")
     fun observeBlocks(id: String): Flow<List<NoteBlock>>

@@ -27,9 +27,15 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
 
     private val appearance = app.getSharedPreferences("appearance", 0)
     val sort = MutableStateFlow(appearance.getString("sort", "modified") ?: "modified")
-    val useGrid = MutableStateFlow(appearance.getBoolean("grid", false))
+    val useGrid = MutableStateFlow(appearance.getBoolean("grid/all", false))
     val folderId = MutableStateFlow<String?>(null)
     val folderBrowsing = MutableStateFlow(false)
+
+    fun toggleGrid() {
+        val next = !useGrid.value
+        appearance.edit().putBoolean("grid/${category.value}", next).apply()
+        useGrid.value = next
+    }
 
     fun showLibrary(next: String) {
         require(
@@ -48,6 +54,8 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         )
         screen.value = null
         history.clear()
+        if (category.value != next)
+            useGrid.value = appearance.getBoolean("grid/$next", next in setOf("images", "videos"))
         category.value = next
         touch()
     }
@@ -391,9 +399,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { sort.collect { appearance.edit().putString("sort", it).apply() } }
-        viewModelScope.launch {
-            useGrid.collect { appearance.edit().putBoolean("grid", it).apply() }
-        }
+
         viewModelScope.launch {
             while (true) {
                 delay(1000)
@@ -543,10 +549,13 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun newNote() = runWork {
-        val id = store.newNote()
-        store.dao.moveItems(listOf(id), if (folderBrowsing.value) folderId.value else null)
-        navigate(id)
+    fun newNote() {
+        val destination = if (folderBrowsing.value) folderId.value else null
+        runWork("Create note") {
+            val id = store.newNote()
+            store.dao.moveItems(listOf(id), destination)
+            navigate(id)
+        }
     }
 
     fun openFolder(id: String?) {
@@ -598,6 +607,7 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
 
     fun groupFiles(ids: List<String>) =
         runWork("Arrange files") {
+            val parent = if (folderBrowsing.value) folderId.value else null
             store.transaction {
                 for (id in ids) {
                     val item = checkNotNull(store.dao.display(id))
@@ -611,7 +621,6 @@ class VaultModel(app: Application) : AndroidViewModel(app) {
                             isEpubFile(item.mime, item.name) -> "EPUB"
                             else -> "Other files"
                         }
-                    val parent = if (folderBrowsing.value) folderId.value else null
                     val normalized = name.lowercase(java.util.Locale.ROOT)
                     val folder =
                         store.dao.sibling(parent, normalized)

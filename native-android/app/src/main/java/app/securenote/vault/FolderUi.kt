@@ -141,6 +141,13 @@ internal fun FolderPanel(model: VaultModel) {
                 }
             }
         }
+        TextButton({
+            model.folderBrowsing.value = false
+            model.folderId.value = null
+            model.showLibrary("all")
+        }) {
+            Text("Search entire vault")
+        }
         jobs.forEach { job ->
             Row {
                 Text(

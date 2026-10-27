@@ -94,9 +94,9 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
     var movingFiles by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ItemSummary?>(null) }
-    var lastFilter by remember { mutableStateOf(Triple(category, query, parent)) }
-    LaunchedEffect(category, query, parent) {
-        val next = Triple(category, query, parent)
+    var lastFilter by remember { mutableStateOf(listOf(category, query, parent, order, grid)) }
+    LaunchedEffect(category, query, parent, order, grid) {
+        val next = listOf(category, query, parent, order, grid)
         if (lastFilter != next) {
             state.scrollToItem(0)
             lastFilter = next
@@ -114,9 +114,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
             "documents" to "Files",
         )
     LazyVerticalGrid(
-        columns =
-            if (grid || category in setOf("images", "videos")) GridCells.Adaptive(140.dp)
-            else GridCells.Fixed(1),
+        columns = if (grid) GridCells.Adaptive(140.dp) else GridCells.Fixed(1),
         state = state,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -133,7 +131,7 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                     }) {
                         Text(if (selecting) "Done" else "Select")
                     }
-                    TextButton({ model.useGrid.value = !grid }) {
+                    TextButton({ model.toggleGrid() }) {
                         Text(if (grid) "List view" else "Grid view")
                     }
                     Box {
@@ -438,6 +436,14 @@ private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> 
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            item.folderName?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Paper.Muted,
+                    maxLines = 1,
+                )
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (item.mime == "application/x-securenote") itemDate(item.updated)

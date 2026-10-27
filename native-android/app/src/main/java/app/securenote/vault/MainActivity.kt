@@ -138,6 +138,7 @@ private fun VaultApp(model: VaultModel) {
                         .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     model.importTree(uri)
                 } catch (e: Exception) {
+                    model.messageSuccess.value = false
                     model.message.value =
                         "Folder permission could not be retained. Select the folder again."
                 }
@@ -543,6 +544,7 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
                 if (bytes != null) model.recover(bytes, pw)
                 else {
                     pw.fill(0)
+                    model.messageSuccess.value = false
                     model.message.value = "Invalid recovery key."
                 }
             } else model.unlock(pw, creating)
