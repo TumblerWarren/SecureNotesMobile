@@ -132,7 +132,9 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             }
             items(blocks, key = { it.id }, contentType = { it.kind }) { block ->
                 Box(Modifier.fillMaxWidth()) {
-                    Column(Modifier.fillMaxWidth().padding(end = if(managingBlocks) 48.dp else 0.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(end = if (managingBlocks) 48.dp else 0.dp)
+                    ) {
                         when (block.kind) {
                             "table" ->
                                 Surface(
@@ -188,40 +190,44 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                         }
                     }
                     var options by remember(block.id) { mutableStateOf(false) }
-                    if(managingBlocks) Box(Modifier.align(Alignment.TopEnd)) {
-                        IconButton(
-                            { options = true },
-                            enabled = !busy,
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            PaperIcon(PaperGlyph.More, "Block options", color = Paper.Muted)
+                    if (managingBlocks)
+                        Box(Modifier.align(Alignment.TopEnd)) {
+                            IconButton(
+                                { options = true },
+                                enabled = !busy,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                PaperIcon(PaperGlyph.More, "Block options", color = Paper.Muted)
+                            }
+                            DropdownMenu(options, { options = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Move up") },
+                                    onClick = {
+                                        options = false
+                                        model.moveBlock(block, -1)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Move down") },
+                                    onClick = {
+                                        options = false
+                                        model.moveBlock(block, 1)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Remove block",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        options = false
+                                        model.removeBlock(block)
+                                    },
+                                )
+                            }
                         }
-                        DropdownMenu(options, { options = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Move up") },
-                                onClick = {
-                                    options = false
-                                    model.moveBlock(block, -1)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Move down") },
-                                onClick = {
-                                    options = false
-                                    model.moveBlock(block, 1)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text("Remove block", color = MaterialTheme.colorScheme.error)
-                                },
-                                onClick = {
-                                    options = false
-                                    model.removeBlock(block)
-                                },
-                            )
-                        }
-                    }
                 }
             }
             item(key = "paragraph") {
@@ -280,7 +286,8 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             Box {
                 PaperEditorTool("Insert", PaperGlyph.Add, enabled = !busy) { insertMenu = true }
                 DropdownMenu(insertMenu, { insertMenu = false }) {
-                    listOf("Table", "Drawing", "Attachment", "Link", "Manage blocks").forEach { label ->
+                    listOf("Table", "Drawing", "Attachment", "Link", "Manage blocks").forEach {
+                        label ->
                         DropdownMenuItem(
                             text = { Text(label) },
                             enabled = label != "Link" || target() != null,
@@ -294,7 +301,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                                             "[[\"\",\"\"],[\"\",\"\"]]",
                                         )
                                     "Manage blocks" -> managingBlocks = !managingBlocks
-                                "Drawing" -> model.addBlock(item.id, "drawing", "[]")
+                                    "Drawing" -> model.addBlock(item.id, "drawing", "[]")
                                     "Attachment" -> model.beginAttachment(item.id)
                                     else ->
                                         target()?.let { edit ->

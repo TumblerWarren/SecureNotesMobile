@@ -37,6 +37,7 @@ internal class FolderImporter(private val context: Context, private val store: V
                 return resolver.query(uri, columns, null, null, null)?.use { c ->
                     val result = ArrayList<Document>()
                     while (c.moveToNext()) {
+                        store.checkSession()
                         require(result.size < 20000) { "Directory has too many entries" }
                         result.add(
                             Document(
@@ -93,7 +94,10 @@ internal class FolderImporter(private val context: Context, private val store: V
                             id
                         }
                     val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, doc.id)
-                    query(children).asReversed().forEach { queue.add(Pending(it, id, depth + 1)) }
+                    query(children).asReversed().forEach {
+                        require(queue.size < 20000)
+                        queue.add(Pending(it, id, depth + 1))
+                    }
                 } else {
                     val signature = "${doc.name}/${doc.size}/${doc.modified}"
                     if (

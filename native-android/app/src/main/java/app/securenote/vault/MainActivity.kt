@@ -3,7 +3,6 @@
 package app.securenote.vault
 
 import android.content.*
-import android.graphics.Bitmap
 import android.os.*
 import android.view.*
 import androidx.activity.ComponentActivity
@@ -11,8 +10,6 @@ import androidx.activity.compose.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,10 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -164,6 +158,11 @@ private fun VaultApp(model: VaultModel) {
             model.attachmentPicker.value = null
             picker.launch(arrayOf("*/*"))
         }
+    }
+    val folderParent by model.folderId.collectAsState()
+    val browsingFolders by model.folderBrowsing.collectAsState()
+    BackHandler(open && selected == null && browsingFolders && folderParent != null) {
+        model.folderUp()
     }
     BackHandler(open && selected != null) {
         focus.clearFocus()
@@ -350,7 +349,7 @@ private fun VaultApp(model: VaultModel) {
                                 },
                                 modifier =
                                     Modifier.weight(1f).testTag("nav-$key").semantics {
-                                        selected = active
+                                        this.selected = active
                                     },
                                 contentPadding = PaddingValues(vertical = 8.dp, horizontal = 0.dp),
                             ) {
@@ -677,7 +676,7 @@ private fun ItemScreen(model: VaultModel, id: String) {
                 isEpubFile(value.mime, value.name) -> EpubViewer(model, id)
                 value.mime.startsWith("audio/") || value.mime.startsWith("video/") ->
                     MediaViewer(model, id, value)
-                value.mime == "application/pdf" -> PdfViewer(model, id)
+                value.mime == "application/pdf" -> SecurePdfReader(model, id)
                 value.mime.startsWith("image/") -> ImageViewer(model, id)
                 value.mime.startsWith("text/") -> TextViewer(model, id)
                 else ->
@@ -763,21 +762,21 @@ private fun MediaViewer(model: VaultModel, id: String, item: VaultItem) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (audio) {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
             Surface(
                 color = Paper.Surface,
                 shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, Paper.Line),
             ) {
-                Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
                     PaperIcon(
                         PaperGlyph.Audio,
                         color = Paper.Accent,
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier.size(32.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 item.name,
                 style = MaterialTheme.typography.headlineMedium,
@@ -791,7 +790,7 @@ private fun MediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 color = Paper.Muted,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
         }
         if (playbackError.isNotEmpty())
             Text(
@@ -819,34 +818,29 @@ private fun MediaViewer(model: VaultModel, id: String, item: VaultItem) {
             },
             modifier =
                 Modifier.fillMaxWidth()
-                    .then(if (audio) Modifier.height(160.dp) else Modifier.weight(1f))
+                    .then(
+                        if (audio)
+                            Modifier.height(
+                                (160 +
+                                        24 *
+                                            androidx.compose.ui.platform.LocalDensity.current
+                                                .fontScale)
+                                    .dp
+                            )
+                        else Modifier.weight(1f)
+                    )
                     .testTag("native-media-player"),
             onRelease = { it.player = null },
         )
-        if (!audio) {
-            Text(
-                item.name,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp),
-            )
-            Text(
-                "Video · ${fileSize(item.size)} · On this device",
-                color = Paper.Muted,
-                style = MaterialTheme.typography.bodySmall,
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .padding(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 24.dp),
-            )
-        }
     }
 }
 
 @Composable
 private fun ImageViewer(model: VaultModel, id: String) {
     val context = LocalContext.current
-    val view = remember(id) { TiledImageView(context, model.store, model.previews, id) }
+    var imageAttempt by remember(id) { mutableIntStateOf(0) }
+    val view =
+        remember(id, imageAttempt) { TiledImageView(context, model.store, model.previews, id) }
     DisposableEffect(view) {
         val unregister = model.onLock { view.close() }
         onDispose {
@@ -854,11 +848,39 @@ private fun ImageViewer(model: VaultModel, id: String) {
             view.close()
         }
     }
-    AndroidView(
-        factory = { view },
-        modifier = Modifier.fillMaxSize(),
-        onRelease = { it.close() },
-    )
+    var state by remember(id) { mutableStateOf("loading") }
+    Box(Modifier.fillMaxSize()) {
+        key(view) {
+            AndroidView(
+                factory = {
+                    view.also {
+                        it.onState = { state = it }
+                        state = it.state
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                onRelease = {
+                    it.onState = null
+                    it.close()
+                },
+            )
+        }
+        if (state == "loading") CircularProgressIndicator(Modifier.align(Alignment.Center))
+        if (state == "error")
+            Column(Modifier.align(Alignment.Center).background(Paper.Background).padding(16.dp)) {
+                TextButton({ imageAttempt++ }) { Text("Retry image") }
+                Text(
+                    "Image preview unavailable. The encrypted file is kept.",
+                    color = Paper.Ink,
+                )
+            }
+        if (state == "ready")
+            Row(Modifier.align(Alignment.BottomCenter).background(Paper.Background)) {
+                TextButton({ view.fitToScreen() }) { Text("Fit") }
+                TextButton({ view.changeZoom(1.5f) }) { Text("Zoom in") }
+                TextButton({ view.changeZoom(1 / 1.5f) }) { Text("Zoom out") }
+            }
+    }
 }
 
 @Composable
@@ -866,7 +888,13 @@ private fun TextViewer(model: VaultModel, id: String) {
     var page by remember(id) { mutableLongStateOf(0) }
     var count by remember(id) { mutableLongStateOf(1) }
     var text by remember(id) { mutableStateOf("") }
-    LaunchedEffect(id, page) {
+    var loading by remember(id) { mutableStateOf(false) }
+    var failure by remember(id) { mutableStateOf(false) }
+    var attempt by remember(id) { mutableIntStateOf(0) }
+    LaunchedEffect(id, page, attempt) {
+        text = ""
+        loading = true
+        failure = false
         text =
             try {
                 withContext(Dispatchers.IO) {
@@ -877,19 +905,25 @@ private fun TextViewer(model: VaultModel, id: String) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                failure = true
                 "Text preview is unavailable."
             }
+        loading = false
     }
     Column(Modifier.fillMaxSize()) {
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (failure) TextButton({ attempt++ }) { Text("Retry text preview") }
         val scroll = remember(page) { ScrollState(0) }
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(24.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(16.dp),
         )
         HorizontalDivider(color = Paper.Line)
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -903,125 +937,4 @@ private fun TextViewer(model: VaultModel, id: String) {
         }
     }
     DisposableEffect(Unit) { onDispose { text = "" } }
-}
-
-@Composable
-private fun PdfViewer(model: VaultModel, id: String) {
-    val context = LocalContext.current
-    val client = remember(id) { PdfClient(context) }
-    var page by remember(id) { mutableIntStateOf(0) }
-    var count by remember(id) { mutableIntStateOf(0) }
-    var width by remember(id) { mutableIntStateOf(768) }
-    var bitmap by remember(id) { mutableStateOf<Bitmap?>(null) }
-    var failed by remember(id) { mutableStateOf(false) }
-    LaunchedEffect(id) {
-        try {
-            count = client.open(model.store, id)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            failed = true
-        }
-    }
-    LaunchedEffect(page, count, width) {
-        if (count > 0)
-            try {
-                bitmap = null
-                failed = false
-                bitmap = client.render(page, width)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                failed = true
-            }
-    }
-    DisposableEffect(client) {
-        val unregister = model.onLock {
-            bitmap = null
-            client.close()
-        }
-        onDispose {
-            unregister()
-            client.close()
-            bitmap = null
-        }
-    }
-    var scale by remember(id) { mutableFloatStateOf(1f) }
-    var offset by remember(id) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    val transform = rememberTransformableState { zoom, pan, _ ->
-        scale = (scale * zoom).coerceIn(1f, 5f)
-        offset = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan
-    }
-    LaunchedEffect(page) {
-        scale = 1f
-        offset = androidx.compose.ui.geometry.Offset.Zero
-    }
-    Column(Modifier.fillMaxSize()) {
-        Box(
-            Modifier.weight(1f)
-                .fillMaxWidth()
-                .background(Paper.Inset)
-                .padding(16.dp)
-                .then(Modifier.clipToBounds()),
-            contentAlignment = Alignment.Center,
-        ) {
-            val image = bitmap
-            if (image != null)
-                Image(
-                    image.asImageBitmap(),
-                    "PDF page",
-                    Modifier.fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = offset.x
-                            translationY = offset.y
-                        }
-                        .transformable(transform),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                )
-            else if (!failed)
-                CircularProgressIndicator(color = Paper.Accent, modifier = Modifier.size(28.dp))
-            if (failed)
-                Text(
-                    "This PDF cannot be previewed. It may be damaged, unsupported, or require its own password.",
-                    color = Paper.Muted,
-                    modifier = Modifier.padding(16.dp),
-                )
-        }
-        HorizontalDivider(color = Paper.Line)
-        Row(
-            Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .background(Paper.Background)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            TextButton({ page-- }, enabled = page > 0) {
-                PaperIcon(PaperGlyph.Back)
-                Spacer(Modifier.width(4.dp))
-                Text("Previous")
-            }
-            Text(
-                if (count > 0) "${page + 1} / $count" else "—",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            TextButton({ page++ }, enabled = count > 0 && page + 1 < count) {
-                Text("Next")
-                Spacer(Modifier.width(4.dp))
-                PaperIcon(PaperGlyph.Next)
-            }
-            IconButton(
-                {
-                    width = if (width < 1536) 1536 else 768
-                    scale = if (scale > 1f) 1f else 1.5f
-                    offset = androidx.compose.ui.geometry.Offset.Zero
-                },
-                enabled = count > 0,
-            ) {
-                PaperIcon(PaperGlyph.Zoom, "Zoom")
-            }
-        }
-    }
 }

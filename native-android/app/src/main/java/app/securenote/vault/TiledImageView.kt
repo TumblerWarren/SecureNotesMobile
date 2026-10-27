@@ -39,12 +39,32 @@ class TiledImageView(
     private val destinationRect = RectF()
     @Volatile private var viewportRevision = 0L
     @Volatile private var fallback: Bitmap? = null
+    var onState: ((String) -> Unit)? = null
+    val state
+        get() = if (failed) "error" else if (ready) "ready" else "loading"
+
+    fun fitToScreen() {
+        fitImage()
+        invalidate()
+    }
+
+    fun changeZoom(factor: Float) {
+        val old = scale
+        scale = (scale * factor).coerceIn(fit, fit * 32)
+        tx = width / 2f - (width / 2f - tx) * scale / old
+        ty = height / 2f - (height / 2f - ty) * scale / old
+        clamp()
+        viewportRevision++
+        invalidate()
+    }
+
     private var ready = false
     private var failed = false
     private val version = store.version()
     private val fallbackKey = "image/$id"
 
     init {
+        contentDescription = "Encrypted image. Use Fit and Zoom controls."
         setBackgroundColor(android.graphics.Color.rgb(18, 22, 30))
         scope.launch {
             try {
@@ -109,6 +129,7 @@ class TiledImageView(
                 withContext(Dispatchers.Main) {
                     if (!closed.get()) {
                         ready = true
+                        onState?.invoke("ready")
                         fitImage()
                         invalidate()
                     }
@@ -118,6 +139,7 @@ class TiledImageView(
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     failed = true
+                    onState?.invoke("error")
                     invalidate()
                 }
             } finally {

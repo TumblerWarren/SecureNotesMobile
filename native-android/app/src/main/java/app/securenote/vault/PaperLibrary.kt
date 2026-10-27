@@ -90,9 +90,9 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
     var movingFiles by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ItemSummary?>(null) }
-    var lastFilter by remember { mutableStateOf(category to query) }
-    LaunchedEffect(category, query) {
-        val next = category to query
+    var lastFilter by remember { mutableStateOf(Triple(category, query, parent)) }
+    LaunchedEffect(category, query, parent) {
+        val next = Triple(category, query, parent)
         if (lastFilter != next) {
             state.scrollToItem(0)
             lastFilter = next

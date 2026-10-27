@@ -47,9 +47,9 @@ jobs:
               for issue in ET.parse(report).getroot().findall('issue'):
                   if issue.get('severity') in ('Error', 'Fatal'):
                       print(ET.tostring(issue, encoding='unicode'))
-          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/3.json')
+          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/4.json')
           if schema.exists():
-              print('GENERATED_SCHEMA_3=' + schema.read_text().replace('\n', ''))
+              print('GENERATED_SCHEMA_4=' + schema.read_text().replace('\n', ''))
           PYREPORT
       - name: Enable KVM
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}

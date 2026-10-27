@@ -6,9 +6,13 @@ import android.net.Uri
 import android.os.*
 import java.util.UUID
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PdfClient(private val context: Context) : AutoCloseable {
+    private val renderGate = Mutex()
+    val dimensions = mutableMapOf<Int, Pair<Int, Int>>()
     private val connected = CompletableDeferred<Messenger>()
     private var opening = CompletableDeferred<Int>()
     private var rendering = CompletableDeferred<Bitmap>()
@@ -39,6 +43,9 @@ class PdfClient(private val context: Context) : AutoCloseable {
                             else opening.completeExceptionally(java.io.IOException("Empty PDF"))
                         PdfService.PAGE -> {
                             val bitmap = msg.data.getParcelable<Bitmap>("bitmap") ?: return
+                            val pw = msg.data.getInt("pageWidth")
+                            val ph = msg.data.getInt("pageHeight")
+                            if (pw > 0 && ph > 0) dimensions[msg.data.getInt("page")] = pw to ph
                             if (
                                 bitmap.width !in 1..2048 ||
                                     bitmap.height !in 1..4096 ||
@@ -125,37 +132,43 @@ class PdfClient(private val context: Context) : AutoCloseable {
         return count
     }
 
-    suspend fun render(page: Int, width: Int): Bitmap {
-        check(!closed)
-        checkNotNull(authority).invoke()
-        rendering.cancel()
-        val deferred = CompletableDeferred<Bitmap>()
-        rendering = deferred
-        request++
-        var received: Bitmap? = null
-        return try {
-            val remote = withTimeout(15000) { connected.await() }
+    suspend fun render(page: Int, width: Int, tileLeft: Int = -1, tileTop: Int = -1): Bitmap =
+        renderGate.withLock {
             check(!closed)
             checkNotNull(authority).invoke()
-            remote.send(
-                Message.obtain(null, PdfService.PAGE, page, width).apply {
-                    replyTo = replies
-                    data = Bundle().apply { putLong("request", request) }
-                }
-            )
-            val bitmap = withTimeout(15000) { deferred.await() }
-            received = bitmap
-            check(!closed)
-            checkNotNull(authority).invoke()
-            bitmap
-        } catch (e: Exception) {
-            received?.recycle()
-            if (received == null && deferred.isCompleted && !deferred.isCancelled)
-                runCatching { deferred.getCompleted().recycle() }
-            deferred.cancel()
-            throw e
+            rendering.cancel()
+            val deferred = CompletableDeferred<Bitmap>()
+            rendering = deferred
+            request++
+            var received: Bitmap? = null
+            try {
+                val remote = withTimeout(15000) { connected.await() }
+                check(!closed)
+                checkNotNull(authority).invoke()
+                remote.send(
+                    Message.obtain(null, PdfService.PAGE, page, width).apply {
+                        replyTo = replies
+                        data =
+                            Bundle().apply {
+                                putLong("request", request)
+                                putInt("tileLeft", tileLeft)
+                                putInt("tileTop", tileTop)
+                            }
+                    }
+                )
+                val bitmap = withTimeout(15000) { deferred.await() }
+                received = bitmap
+                check(!closed)
+                checkNotNull(authority).invoke()
+                bitmap
+            } catch (e: Exception) {
+                received?.recycle()
+                if (received == null && deferred.isCompleted && !deferred.isCancelled)
+                    runCatching { deferred.getCompleted().recycle() }
+                deferred.cancel()
+                throw e
+            }
         }
-    }
 
     @Synchronized
     override fun close() {

@@ -62,11 +62,32 @@ class PdfService : Service() {
                                 PAGE -> {
                                     val renderer = checkNotNull(session.renderer)
                                     renderer.openPage(msg.arg1).use { page ->
-                                        val width = msg.arg2.coerceIn(128, 2048)
+                                        val tile = msg.data.getInt("tileLeft", -1) >= 0
+                                        val renderWidth =
+                                            msg.arg2.coerceIn(128, if (tile) 65536 else 2048)
+                                        val left = msg.data.getInt("tileLeft", -1)
+                                        val top = msg.data.getInt("tileTop", -1)
+                                        val factor = renderWidth.toFloat() / page.width
+                                        val pageHeight =
+                                            renderWidth.toDouble() * page.height / page.width
+                                        if (tile)
+                                            require(
+                                                left in 0..65536 &&
+                                                    top >= 0 &&
+                                                    top.toDouble() < pageHeight &&
+                                                    left < renderWidth
+                                            )
+                                        val width =
+                                            if (tile) 512
+                                            else
+                                                minOf(
+                                                    renderWidth,
+                                                    (2048.0 * page.width / page.height)
+                                                        .toInt()
+                                                        .coerceAtLeast(1),
+                                                )
                                         val height =
-                                            (width.toLong() * page.height / page.width)
-                                                .coerceIn(1, 4096)
-                                                .toInt()
+                                            if (tile) 512 else pageHeight.toInt().coerceIn(1, 4096)
                                         require(width.toLong() * height * 4 <= 24L * 1024 * 1024)
                                         val image =
                                             Bitmap.createBitmap(
@@ -79,7 +100,15 @@ class PdfService : Service() {
                                             page.render(
                                                 image,
                                                 null,
-                                                null,
+                                                if (tile)
+                                                    android.graphics.Matrix().apply {
+                                                        setScale(factor, factor)
+                                                        postTranslate(
+                                                            -left.toFloat(),
+                                                            -top.toFloat(),
+                                                        )
+                                                    }
+                                                else null,
                                                 PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
                                             )
                                             msg.replyTo.send(
@@ -87,6 +116,9 @@ class PdfService : Service() {
                                                     data =
                                                         Bundle().apply {
                                                             putParcelable("bitmap", image)
+                                                            putInt("pageWidth", page.width)
+                                                            putInt("pageHeight", page.height)
+                                                            putInt("page", msg.arg1)
                                                             putLong(
                                                                 "request",
                                                                 msg.data.getLong("request"),

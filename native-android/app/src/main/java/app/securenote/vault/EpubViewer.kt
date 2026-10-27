@@ -285,7 +285,9 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     }
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(
@@ -296,7 +298,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 Spacer(Modifier.width(6.dp))
                 Text("Contents")
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
             TextButton(
                 {
                     font = (font - 2).coerceAtLeast(16)
@@ -337,19 +339,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                     )
                 }
             else
-                Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(24.dp)) {
-                    val book = catalog
-                    if (book != null) {
-                        Text(book.title, style = MaterialTheme.typography.headlineMedium)
-                        if (book.author.isNotBlank())
-                            Text(
-                                book.author,
-                                color = Paper.Muted,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 6.dp),
-                            )
-                        Spacer(Modifier.height(20.dp))
-                    }
+                Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(16.dp)) {
                     val current = frame
                     if (current != null)
                         AndroidView(
