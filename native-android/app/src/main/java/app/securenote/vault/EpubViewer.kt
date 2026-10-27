@@ -40,7 +40,7 @@ import kotlinx.coroutines.withContext
  * Native text and internally resolved images/links only. No WebView, disk cache or external
  * intents.
  */
-internal class EpubTextView(context: Context) : TextView(context) {
+internal class EpubTextView(context: Context) : TextView(context, null, 0, R.style.SecureVaultText) {
     private var displayed: EpubFrame? = null
     private var displayedFont = -1
     private var renderedWidth = -1
@@ -59,7 +59,7 @@ internal class EpubTextView(context: Context) : TextView(context) {
         isSaveFromParentEnabled = false
         freezesText = false
         importantForAutofill = IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-        if (Build.VERSION.SDK_INT >= 29)
+        if (Build.VERSION.SDK_INT >= 30)
             importantForContentCapture = IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS
     }
 

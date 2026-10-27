@@ -9,7 +9,7 @@ import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMe
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 
-open class SecureEditText(context: android.content.Context) : EditText(context) {
+open class SecureEditText(context: android.content.Context) : EditText(context, null, 0, R.style.SecureVaultEditText) {
     override fun onTextContextMenuItem(id: Int): Boolean =
         if (id == android.R.id.copy || id == android.R.id.cut || id == android.R.id.shareText) false
         else super.onTextContextMenuItem(id)
@@ -69,7 +69,7 @@ fun EditText.restrictExternalActions() {
     setAutofillHints(null)
     if (android.os.Build.VERSION.SDK_INT >= 26)
         importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-    if (android.os.Build.VERSION.SDK_INT >= 29)
+    if (android.os.Build.VERSION.SDK_INT >= 30)
         importantForContentCapture =
             android.view.View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS
     imeOptions =

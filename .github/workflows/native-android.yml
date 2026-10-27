@@ -31,17 +31,34 @@ jobs:
         working-directory: native-android
         run: python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
       - name: Compile functional tests
+        id: compile
         working-directory: native-android
         run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Release and performance checks
         working-directory: native-android
-        run: ./gradlew :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
+        run: ./gradlew --continue :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
+      - name: Report lint errors and generated schema
+        if: always()
+        working-directory: native-android
+        run: |
+          python3 - <<'PYREPORT'
+          import pathlib, xml.etree.ElementTree as ET
+          for report in pathlib.Path('app/build/reports').glob('lint-results-*.xml'):
+              for issue in ET.parse(report).getroot().findall('issue'):
+                  if issue.get('severity') in ('Error', 'Fatal'):
+                      print(ET.tostring(issue, encoding='unicode'))
+          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/3.json')
+          if schema.exists():
+              print('GENERATED_SCHEMA_3=' + schema.read_text().replace('\n', ''))
+          PYREPORT
       - name: Enable KVM
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Instrumentation tests
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
