@@ -108,6 +108,10 @@ class SyntheticScreenCaptureTest {
             rule.setContent {
                 CompositionLocalProvider(
                     LocalContext provides configured,
+                    androidx.activity.compose.LocalActivityResultRegistryOwner provides
+                        rule.activity,
+                    androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides
+                        rule.activity,
                     LocalDensity provides Density(density, font),
                 ) {
                     PaperTheme { VaultApp(model) }

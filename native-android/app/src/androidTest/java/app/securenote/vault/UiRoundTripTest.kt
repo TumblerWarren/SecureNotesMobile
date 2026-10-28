@@ -102,8 +102,15 @@ class UiRoundTripTest {
         org.junit.Assert.assertTrue("Revoke readers before native cleanup", revokedFirst.get())
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
         rule.onNodeWithText("Unlock", substring = false).performScrollTo().performClick()
-        rule.waitUntil(30000) {
-            rule.onAllNodesWithTag("vault-library").fetchSemanticsNodes().isNotEmpty()
+        try {
+            rule.waitUntil(30000) {
+                rule.onAllNodesWithTag("vault-library").fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (e: Exception) {
+            throw AssertionError(
+                "Unlock failed to reach library: open=${model.unlocked.value}, busy=${model.busy.value}, store=${model.store.isOpen}, screen=${model.screen.value}, lifecycle=${rule.activity.lifecycle.currentState}, message=${model.message.value}",
+                e,
+            )
         }
         // Lazy-grid items can be outside the viewport on compact phones.
         rule.onNodeWithTag("vault-library").performScrollToNode(hasText("Native round-trip note"))
