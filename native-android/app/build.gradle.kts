@@ -5,6 +5,20 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// The workflow counter advances for PR, main-branch and manual builds. Re-running
+// the same workflow run retains its version; a new run receives a higher code.
+val ciBuildNumber =
+    providers.environmentVariable("ANDROID_BUILD_NUMBER").orNull?.let { value ->
+        requireNotNull(value.toIntOrNull()) { "ANDROID_BUILD_NUMBER must be an integer" }
+            .also {
+                require(it in 1..2_099_999_000) {
+                    "ANDROID_BUILD_NUMBER exceeds Android versionCode bounds"
+                }
+            }
+    }
+val appVersionCode = ciBuildNumber?.let { 1000 + it } ?: 4
+val appVersionName = ciBuildNumber?.let { "2.0.1-build.$it" } ?: "2.0.1-dev"
+
 android {
     namespace = "app.securenote.vault"
     compileSdk = 36
@@ -13,8 +27,8 @@ android {
         applicationId = "com.anonymous.SecureNotesMobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "2.0.0-paper"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON" } }

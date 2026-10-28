@@ -1,5 +1,8 @@
 name: Native Android
 on:
+  push:
+    branches: [master]
+    paths: ['native-android/**', '.github/workflows/native-android.yml']
   pull_request:
     paths: ['native-android/**', '.github/workflows/native-android.yml']
   workflow_dispatch:
@@ -8,6 +11,8 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+env:
+  ANDROID_BUILD_NUMBER: ${{ github.run_number }}
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -34,6 +39,24 @@ jobs:
         id: compile
         working-directory: native-android
         run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify generated APK version
+        working-directory: native-android
+        run: |
+          python3 - <<'PYVERSION'
+          import os, pathlib, re, subprocess
+          build = int(os.environ['ANDROID_BUILD_NUMBER'])
+          apk = 'app/build/outputs/apk/debug/app-debug.apk'
+          aapt = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0/aapt'
+          badging = subprocess.check_output([str(aapt), 'dump', 'badging', apk], text=True)
+          code = int(re.search(r"versionCode='(\d+)'", badging).group(1))
+          name = re.search(r"versionName='([^']+)'", badging).group(1)
+          assert code == 1000 + build, (code, build)
+          assert name == f'2.0.1-build.{build}-preview', name
+          summary = f'Android preview: **{name}** — version code **{code}**\n'
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write(summary)
+          PYVERSION
       - name: Release and performance checks
         working-directory: native-android
         run: ./gradlew --continue :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark

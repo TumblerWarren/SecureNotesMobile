@@ -18,7 +18,7 @@ Arbitrary files can be stored. Office document previews, password-protected PDFs
 
 ## Build
 
-GitHub Actions builds and verifies `codex/paper-ui`. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records validation results and links the preview APK, recordings and actual screen captures. Local Gradle startup is blocked by the execution environment’s socket restrictions.
+GitHub Actions builds and verifies pull requests, Android-related pushes/merges to `master`, and manual workflow dispatches. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records validation results and links the preview APK, recordings and actual screen captures. Local Gradle startup is blocked by the execution environment’s socket restrictions.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 
@@ -30,6 +30,12 @@ python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
 The sodium script builds checksummed upstream source for ARM64 and x86-64. Generated source/binaries stay ignored. Native libraries use 16 KiB-compatible linker alignment.
 
 The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application ID `com.anonymous.SecureNotesMobile.nativepreview`; it installs alongside the existing application. Production builds retain the original application ID and require its original signing key. Release builds are unsigned; no deployment is performed by building them.
+
+## Build versions
+
+CI passes its monotonically increasing workflow run number as `ANDROID_BUILD_NUMBER` to both jobs. Each new run uses `versionCode = 1000 + run number` and preview version `2.0.1-build.<run number>-preview`. Thus a post-merge build has a higher version than its preceding PR build. Re-running an existing run retains its version; starting a new manual run advances it. The workflow checks the actual generated APK metadata and publishes the version in the job summary.
+
+Local builds without that environment variable use development code 4 and `2.0.1-dev-preview`; they are not newer than CI builds. Keep the same workflow counter, and raise the offset if that counter is ever reset. Production upgrades also require the original signing key.
 
 ## Verification
 
