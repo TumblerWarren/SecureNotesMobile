@@ -125,6 +125,15 @@ class VisualWalkthroughTest {
                 home()
                 rule.runOnIdle { model.useGrid.value = true }
                 save("library-grid")
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("entry-${ids.getValue("note")}"))
+                rule.onNodeWithTag("entry-${ids.getValue("note")}").performTouchInput {
+                    longClick()
+                }
+                waitText("1 selected")
+                rule.onNodeWithTag("select-${ids.getValue("note")}").assertIsOn()
+                save("long-press-selection")
             }
             step("sort-menu") {
                 home()
@@ -387,6 +396,9 @@ class VisualWalkthroughTest {
                 open(ids.getValue("epub"))
                 waitTag("epub-content")
                 save("epub-reading")
+                rule.onNodeWithTag("epub-content").performTouchInput { swipeLeft() }
+                rule.waitForIdle()
+                save("epub-swiped")
                 rule.onNodeWithContentDescription("Contents", substring = false).performClick()
                 save("epub-contents")
             }
@@ -439,6 +451,12 @@ class VisualWalkthroughTest {
                 rule.waitUntil(15000) { model.playing }
                 rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("video-playing")
+                rule.waitUntil(7000) {
+                    rule.onAllNodesWithTag("media-controls").fetchSemanticsNodes().isEmpty()
+                }
+                save("video-controls-hidden")
+                rule.onNodeWithTag("video-picture").performClick()
+                rule.onNodeWithTag("media-controls").assertExists()
                 rule
                     .onNodeWithContentDescription("Playback settings", substring = false)
                     .performScrollTo()
@@ -452,6 +470,10 @@ class VisualWalkthroughTest {
                     .performClick()
                 waitDescription("Close full screen")
                 save("video-fullscreen")
+                rule.waitUntil(7000) {
+                    rule.onAllNodesWithTag("media-controls").fetchSemanticsNodes().isEmpty()
+                }
+                rule.onNodeWithTag("video-picture").performClick()
                 rule
                     .onNodeWithContentDescription("Close full screen", substring = false)
                     .performClick()

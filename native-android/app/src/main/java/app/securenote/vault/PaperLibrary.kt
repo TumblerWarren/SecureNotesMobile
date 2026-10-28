@@ -12,8 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -88,6 +92,11 @@ fun PaperLibrary(
     onSelecting: (Boolean) -> Unit = {},
     onAdd: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val chipStyle = MaterialTheme.typography.labelLarge
+    val cellWidth = if (density.fontScale > 1.5f) 220.dp else 136.dp
     val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
     val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val query by model.query.collectAsState()
@@ -309,35 +318,43 @@ fun PaperLibrary(
                 if (browsing && parent != null)
                     Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
                 search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilterChip(
-                        selected = category == "all",
-                        onClick = { model.showLibrary("all") },
-                        label = { Text("All") },
-                        shape = RoundedCornerShape(14.dp),
-                    )
-                    if (category != "all")
-                        FilterChip(
-                            selected = true,
-                            onClick = { types = true },
-                            modifier = Modifier.weight(1f, fill = false),
-                            label = {
-                                Text(
-                                    filters.firstOrNull { it.first == category }?.second ?: "Files",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                        )
-                    PaperAction("File types", PaperGlyph.Add) {
-                        inputFocus.clearFocus()
-                        inputKeyboard?.hide()
-                        types = true
+                BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    val available = with(density) { (maxWidth - 48.dp).toPx() }
+                    val visible = mutableListOf<Pair<String, String>>()
+                    var used = 0f
+                    for (filter in filters.take(4)) {
+                        val width =
+                            measurer.measure(filter.second, chipStyle).size.width +
+                                with(density) { 40.dp.toPx() }
+                        if (visible.isNotEmpty() && used + width > available) break
+                        visible.add(filter)
+                        used += width
+                    }
+                    if (category != "all" && visible.none { it.first == category }) {
+                        val active = filters.firstOrNull { it.first == category }
+                        if (active != null && visible.size > 1) visible[visible.lastIndex] = active
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        visible.forEach { (key, label) ->
+                            FilterChip(
+                                selected = category == key,
+                                onClick = { model.showLibrary(key) },
+                                modifier = Modifier.weight(1f, fill = false),
+                                label = {
+                                    Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                        }
+                        PaperAction("File types", PaperGlyph.Add) {
+                            inputFocus.clearFocus()
+                            inputKeyboard?.hide()
+                            types = true
+                        }
                     }
                 }
             }
@@ -350,7 +367,7 @@ fun PaperLibrary(
                     Text("Search entire vault")
                 }
             LazyVerticalGrid(
-                columns = if (grid) GridCells.Adaptive(152.dp) else GridCells.Fixed(1),
+                columns = if (grid) GridCells.Adaptive(cellWidth) else GridCells.Fixed(1),
                 state = state,
                 modifier = Modifier.weight(1f).fillMaxWidth().testTag("vault-library"),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -364,46 +381,72 @@ fun PaperLibrary(
                 ) {
                     FolderRow(model, it)
                 }
-                if (visibleFolders.isNotEmpty() && pages.itemCount > 0)
+                if (browsing && pages.itemCount > 0)
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            if (parent == null) "Unfiled" else "Files",
-                            Modifier.padding(top = 8.dp, bottom = 4.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Paper.Muted,
-                        )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (parent == null) "Unfiled" else "Files",
+                                Modifier.weight(1f).padding(vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Paper.Muted,
+                            )
+                            if (!selecting) TextButton({ selecting = true }) { Text("Organize") }
+                        }
                     }
-                items(count = pages.itemCount, key = { pages.peek(it)?.id ?: "placeholder/$it" }) {
-                    index ->
+                items(
+                    count = pages.itemCount,
+                    key = { pages.peek(it)?.id ?: "placeholder/$it" },
+                    span = { index ->
+                        val mime = pages.peek(index)?.mime.orEmpty()
+                        GridItemSpan(
+                            if (!grid || mime.startsWith("video/") || mime.startsWith("audio/"))
+                                maxLineSpan
+                            else 1
+                        )
+                    },
+                ) { index ->
                     val item = pages[index]
                     if (item != null) {
                         val checked = item.id in chosen
-                        Row(
+                        Box(
                             Modifier.fillMaxWidth()
-                                .background(
-                                    if (checked) Paper.AccentSoft else Paper.Surface,
+                                .border(
+                                    if (checked) 2.dp else 0.dp,
+                                    if (checked) Paper.Accent
+                                    else androidx.compose.ui.graphics.Color.Transparent,
                                     RoundedCornerShape(12.dp),
-                                ),
-                            verticalAlignment = Alignment.CenterVertically,
+                                )
                         ) {
+                            VaultEntry(
+                                model,
+                                item,
+                                grid,
+                                selecting,
+                                { chosen = if (checked) chosen - item.id else chosen + item.id },
+                                { deleting = item },
+                                {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selecting = true
+                                    chosen = chosen + item.id
+                                },
+                                {
+                                    chosen = setOf(item.id)
+                                    selecting = true
+                                    moving = true
+                                },
+                            )
                             if (selecting)
                                 Checkbox(
                                     checked,
                                     { chosen = if (it) chosen + item.id else chosen - item.id },
-                                    modifier = Modifier.testTag("select-${item.id}"),
+                                    modifier =
+                                        Modifier.align(Alignment.TopEnd)
+                                            .background(Paper.Surface, RoundedCornerShape(12.dp))
+                                            .testTag("select-${item.id}"),
                                 )
-                            Box(Modifier.weight(1f)) {
-                                VaultEntry(
-                                    model,
-                                    item,
-                                    grid,
-                                    selecting,
-                                    {
-                                        chosen = if (checked) chosen - item.id else chosen + item.id
-                                    },
-                                    { deleting = item },
-                                )
-                            }
                         }
                     }
                 }
@@ -640,6 +683,8 @@ private fun VaultEntry(
     selecting: Boolean,
     select: () -> Unit,
     remove: () -> Unit,
+    longSelect: () -> Unit,
+    move: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val visual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
@@ -648,6 +693,21 @@ private fun VaultEntry(
         Box {
             PaperAction("Options for ${item.name}", PaperGlyph.More) { menu = true }
             DropdownMenu(menu, { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Select") },
+                    onClick = {
+                        menu = false
+                        longSelect()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Move to folder") },
+                    leadingIcon = { PaperIcon(PaperGlyph.Move) },
+                    onClick = {
+                        menu = false
+                        move()
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text(if (item.pinned) "Unpin" else "Pin") },
                     onClick = {
@@ -671,17 +731,26 @@ private fun VaultEntry(
     val click = { if (selecting) select() else model.navigate(item.id) }
     if (grid)
         Card(
-            onClick = click,
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .testTag("entry-${item.id}")
+                    .combinedClickable(onClick = click, onLongClick = longSelect),
             colors = CardDefaults.cardColors(containerColor = Paper.Surface),
             border = BorderStroke(1.dp, Paper.Line),
             shape = RoundedCornerShape(12.dp),
         ) {
-            if (visual) PaperThumbnail(model, item, Modifier.fillMaxWidth().height(112.dp))
+            if (visual)
+                PaperThumbnail(
+                    model,
+                    item,
+                    Modifier.fillMaxWidth()
+                        .aspectRatio(if (item.mime.startsWith("video/")) 16f / 9f else 1.3f),
+                )
+            else PaperFileBadge(item.mime, Modifier.padding(start = 12.dp, top = 12.dp), item.name)
             Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
                 Text(
                     item.name,
-                    Modifier.padding(end = 8.dp),
+                    Modifier.padding(end = if (selecting) 44.dp else 8.dp),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -703,7 +772,8 @@ private fun VaultEntry(
         Row(
             Modifier.fillMaxWidth()
                 .heightIn(min = 72.dp)
-                .clickable(onClick = click)
+                .testTag("entry-${item.id}")
+                .combinedClickable(onClick = click, onLongClick = longSelect)
                 .padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

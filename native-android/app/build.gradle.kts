@@ -41,12 +41,22 @@ android {
     }
     buildFeatures { compose = true }
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    val releaseKeystore = providers.environmentVariable("ANDROID_SIGNING_KEYSTORE_PATH").orNull
+    if (releaseKeystore != null) {
+        signingConfigs.create("vaultRelease") {
+            storeFile = file(releaseKeystore)
+            storePassword = providers.environmentVariable("ANDROID_SIGNING_STORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("ANDROID_SIGNING_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("ANDROID_SIGNING_KEY_PASSWORD").get()
+        }
+    }
     buildTypes {
         debug {
             applicationIdSuffix = ".nativepreview"
             versionNameSuffix = "-preview"
         }
         release {
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("vaultRelease")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

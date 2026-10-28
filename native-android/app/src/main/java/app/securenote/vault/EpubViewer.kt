@@ -16,6 +16,7 @@ import android.view.View
 import android.widget.TextView
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +27,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -194,6 +197,8 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     var loading by remember(id) { mutableStateOf(true) }
     var failure by remember(id) { mutableStateOf("") }
     var contents by remember(id) { mutableStateOf(false) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
+    var activeContent by remember(id) { mutableStateOf<String?>(null) }
     var initialPosition by remember(id) { mutableStateOf<EpubPosition?>(null) }
     // Reading position belongs only in the encrypted index, never saved-instance state.
     val scroll =
@@ -229,6 +234,25 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             }
         }
     }
+    fun turn(direction: Int) {
+        if (loading || failure.isNotEmpty()) return
+        val step = (viewportHeight * .9f).toInt().coerceAtLeast(1)
+        if (
+            (direction > 0 && scroll.value < scroll.maxValue) || (direction < 0 && scroll.value > 0)
+        ) {
+            scope.launch {
+                scroll.animateScrollTo(
+                    (scroll.value + direction * step).coerceIn(0, scroll.maxValue)
+                )
+            }
+        } else if (
+            (direction > 0 && frame?.next == true) || (direction < 0 && frame?.previous == true)
+        ) {
+            activeContent = null
+            navigate { client.move(direction) }
+        }
+    }
+    val latestTurn by rememberUpdatedState<(Int) -> Unit>(::turn)
     DisposableEffect(client, view) {
         val unregister = model.onLock {
             view.clearContent()
@@ -322,7 +346,27 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 color = Paper.Accent,
                 trackColor = Paper.Inset,
             )
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            Modifier.weight(1f)
+                .fillMaxWidth()
+                .onSizeChanged { viewportHeight = it.height }
+                .pointerInput(Unit) {
+                    var dragged = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragged = 0f },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            dragged += amount
+                        },
+                        onDragCancel = { dragged = 0f },
+                        onDragEnd = {
+                            if (kotlin.math.abs(dragged) > 48.dp.toPx())
+                                latestTurn(if (dragged < 0) 1 else -1)
+                            dragged = 0f
+                        },
+                    )
+                }
+        ) {
             if (failure.isNotEmpty())
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
@@ -358,8 +402,9 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
-                { navigate { client.move(-1) } },
-                enabled = frame?.previous == true && !loading && failure.isEmpty(),
+                { turn(-1) },
+                enabled =
+                    (frame?.previous == true || scroll.value > 0) && !loading && failure.isEmpty(),
             ) {
                 PaperIcon(PaperGlyph.Back, "Previous section")
             }
@@ -379,8 +424,11 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 }
             }
             IconButton(
-                { navigate { client.move(1) } },
-                enabled = frame?.next == true && !loading && failure.isEmpty(),
+                { turn(1) },
+                enabled =
+                    (frame?.next == true || scroll.value < scroll.maxValue) &&
+                        !loading &&
+                        failure.isEmpty(),
             ) {
                 PaperIcon(PaperGlyph.Next, "Next section")
             }
@@ -388,18 +436,21 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     }
     if (contents)
         PaperSheet("Chapters", { contents = false }) {
-            val chapters = catalog?.chapters.orEmpty()
+            val chapters = catalog?.contents.orEmpty()
             val list =
                 rememberLazyListState(
                     initialFirstVisibleItemIndex =
-                        (frame?.chapter ?: 0).coerceIn(0, (chapters.size - 1).coerceAtLeast(0))
+                        chapters.indexOfFirst { it.chapter == frame?.chapter }.coerceAtLeast(0)
                 )
             val available =
                 androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .55f
             @Composable
             fun chapterRow(index: Int) {
-                val label = chapters[index]
-                val active = index == frame?.chapter
+                val entry = chapters[index]
+                val label = entry.title
+                val active =
+                    if (activeContent != null) entry.link == activeContent
+                    else index == chapters.indexOfFirst { it.chapter == frame?.chapter }
                 Surface(
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                     color = if (active) Paper.AccentSoft else Paper.Background,
@@ -409,9 +460,15 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                             .heightIn(min = 56.dp)
                             .clickable {
                                 contents = false
-                                navigate { client.go(index) }
+                                activeContent = entry.link
+                                navigate { client.follow(entry.link) }
                             }
-                            .padding(12.dp),
+                            .padding(
+                                start = 12.dp + (entry.depth * 12).dp,
+                                end = 12.dp,
+                                top = 12.dp,
+                                bottom = 12.dp,
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (active)

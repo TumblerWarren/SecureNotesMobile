@@ -110,6 +110,22 @@ class EpubService : Service() {
                                                 "chapters",
                                                 ArrayList(book.chapters.map { it.title }),
                                             )
+                                            putStringArrayList(
+                                                "tocTitles",
+                                                ArrayList(book.contents.map { it.title }),
+                                            )
+                                            putIntArray(
+                                                "tocChapters",
+                                                book.contents.map { it.chapter }.toIntArray(),
+                                            )
+                                            putStringArrayList(
+                                                "tocAnchors",
+                                                ArrayList(book.contents.map { it.anchor }),
+                                            )
+                                            putIntArray(
+                                                "tocDepths",
+                                                book.contents.map { it.depth }.toIntArray(),
+                                            )
                                         }
                                     }
                                 msg.replyTo.send(Message.obtain(null, PAGE).apply { data = bundle })

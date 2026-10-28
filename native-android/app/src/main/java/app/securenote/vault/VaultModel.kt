@@ -11,8 +11,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-class VaultModel internal constructor(app: Application, val store: VaultStore) :
-    AndroidViewModel(app) {
+class VaultModel
+internal constructor(
+    app: Application,
+    val store: VaultStore,
+    private val pickerClock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
+) : AndroidViewModel(app) {
     constructor(app: Application) : this(app, VaultStore(app))
 
     val previews = Previews(app, store)
@@ -29,13 +33,13 @@ class VaultModel internal constructor(app: Application, val store: VaultStore) :
 
     private val appearance = app.getSharedPreferences("appearance", 0)
     val sort = MutableStateFlow(appearance.getString("sort", "modified") ?: "modified")
-    val useGrid = MutableStateFlow(appearance.getBoolean("grid/all", false))
+    val useGrid = MutableStateFlow(appearance.getBoolean("layout-v2/all", true))
     val folderId = MutableStateFlow<String?>(null)
     val folderBrowsing = MutableStateFlow(false)
 
     fun toggleGrid() {
         val next = !useGrid.value
-        appearance.edit().putBoolean("grid/${category.value}", next).apply()
+        appearance.edit().putBoolean("layout-v2/${category.value}", next).apply()
         useGrid.value = next
     }
 
@@ -57,7 +61,7 @@ class VaultModel internal constructor(app: Application, val store: VaultStore) :
         screen.value = null
         history.clear()
         if (category.value != next)
-            useGrid.value = appearance.getBoolean("grid/$next", next in setOf("images", "videos"))
+            useGrid.value = appearance.getBoolean("layout-v2/$next", next != "audio")
         category.value = next
         touch()
     }
@@ -311,6 +315,38 @@ class VaultModel internal constructor(app: Application, val store: VaultStore) :
                 store.collectOrphans()
             }
         }
+    }
+
+    private var pickerDeadline = 0L
+    private var pickerTimeout: Job? = null
+
+    /** A one-shot, two-minute exception only for a system picker launched by this session. */
+    fun beginDocumentPicker(): Boolean {
+        if (!unlocked.value || !store.isOpen) return false
+        pickerTimeout?.cancel()
+        pickerDeadline = pickerClock() + 120000
+        pickerTimeout = viewModelScope.launch {
+            delay(120000)
+            if (pickerDeadline != 0L) lock()
+        }
+        return true
+    }
+
+    fun finishDocumentPicker() {
+        val expired = pickerDeadline != 0L && pickerClock() >= pickerDeadline
+        pickerDeadline = 0L
+        pickerTimeout?.cancel()
+        pickerTimeout = null
+        if (expired) lock() else touch()
+    }
+
+    fun onActivityPaused() {
+        if (pickerDeadline == 0L || pickerClock() >= pickerDeadline) lock()
+    }
+
+    fun onActivityResumed() {
+        // Activity results arrive before resume. Returning without a result cancels the exception.
+        if (pickerDeadline != 0L) lock()
     }
 
     var pendingImports: List<Uri> = emptyList()
@@ -658,6 +694,9 @@ class VaultModel internal constructor(app: Application, val store: VaultStore) :
     fun pin(id: String) = runWork { store.dao.togglePin(id) }
 
     fun lock() {
+        pickerDeadline = 0L
+        pickerTimeout?.cancel()
+        pickerTimeout = null
         if (!unlocked.value && !busy.value) return
         generation++
         store.revoke()

@@ -96,8 +96,13 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    override fun onResume() {
+        super.onResume()
+        model.onActivityResumed()
+    }
+
     override fun onPause() {
-        model.lock()
+        model.onActivityPaused()
         super.onPause()
     }
 }
@@ -129,10 +134,12 @@ internal fun VaultApp(model: VaultModel) {
     }
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
+            model.finishDocumentPicker()
             model.importUris(it)
         }
     val treePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            model.finishDocumentPicker()
             if (uri != null) {
                 try {
                     model
@@ -149,8 +156,21 @@ internal fun VaultApp(model: VaultModel) {
         }
     val oldPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+            model.finishDocumentPicker()
             model.legacySource.value = it
         }
+    fun launchDocumentPicker(launch: () -> Unit) {
+        if (!model.beginDocumentPicker()) return
+        focus.clearFocus()
+        keyboard?.hide()
+        try {
+            launch()
+        } catch (e: Exception) {
+            model.finishDocumentPicker()
+            model.messageSuccess.value = false
+            model.message.value = "The system file picker could not be opened."
+        }
+    }
     LaunchedEffect(open) {
         if (!open) {
             settings = false
@@ -160,7 +180,7 @@ internal fun VaultApp(model: VaultModel) {
     LaunchedEffect(attach) {
         if (attach != null) {
             model.attachmentPicker.value = null
-            picker.launch(arrayOf("*/*"))
+            launchDocumentPicker { picker.launch(arrayOf("*/*")) }
         }
     }
     val folderParent by model.folderId.collectAsState()
@@ -439,11 +459,11 @@ internal fun VaultApp(model: VaultModel) {
                                     "New note" -> model.newNote()
                                     "Import files" -> {
                                         model.prepareImport()
-                                        picker.launch(arrayOf("*/*"))
+                                        launchDocumentPicker { picker.launch(arrayOf("*/*")) }
                                     }
                                     else -> {
                                         model.prepareImport()
-                                        treePicker.launch(null)
+                                        launchDocumentPicker { treePicker.launch(null) }
                                     }
                                 }
                             },
@@ -471,17 +491,17 @@ internal fun VaultApp(model: VaultModel) {
                 { settings = false },
                 {
                     settings = false
-                    oldPicker.launch(arrayOf("*/*"))
+                    launchDocumentPicker { oldPicker.launch(arrayOf("*/*")) }
                 },
                 {
                     settings = false
                     model.prepareImport()
-                    picker.launch(arrayOf("*/*"))
+                    launchDocumentPicker { picker.launch(arrayOf("*/*")) }
                 },
                 {
                     settings = false
                     model.prepareImport()
-                    treePicker.launch(null)
+                    launchDocumentPicker { treePicker.launch(null) }
                 },
             )
         if (legacySource != null) LegacyPasswordDialog(model)
