@@ -161,10 +161,17 @@ class VisualWalkthroughTest {
             step("unfiled-move") {
                 home()
                 rule.onNodeWithTag("nav-folders").performClick()
-                waitText("16 items", true)
-                rule
-                    .onNodeWithTag("vault-library")
-                    .performScrollToNode(hasText("Organize", substring = false))
+                if (landscape) {
+                    waitText("Travel documents")
+                    // Compact headers omit the count. Two fixture folders precede Unfiled.
+                    rule.onNodeWithTag("vault-library").performScrollToIndex(2)
+                    waitText("Organize")
+                } else {
+                    waitText("16 items", true)
+                    rule
+                        .onNodeWithTag("vault-library")
+                        .performScrollToNode(hasText("Organize", substring = false))
+                }
                 rule.onNodeWithText("Organize", substring = false).performClick()
                 rule
                     .onNodeWithTag("vault-library")
