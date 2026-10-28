@@ -448,7 +448,16 @@ class VisualWalkthroughTest {
                 waitTag("epub-content")
                 save("epub-reading")
                 rule.onNodeWithTag("epub-content").performTouchInput { swipeLeft() }
-                rule.waitForIdle()
+                rule.waitUntil(5000) {
+                    var offset = 0
+                    instrumentation.runOnMainSync {
+                        offset =
+                            rule.activity.window.decorView
+                                .findViewWithTag<EpubScrollView>("epub-scroll")
+                                ?.scrollY ?: 0
+                    }
+                    offset > 0
+                }
                 rule.onNodeWithText("Chapter 1 / 2", substring = false).assertExists()
                 save("epub-swiped")
                 rule.onNodeWithContentDescription("Contents", substring = false).performClick()

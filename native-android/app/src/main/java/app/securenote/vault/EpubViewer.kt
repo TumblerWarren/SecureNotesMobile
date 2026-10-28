@@ -219,6 +219,7 @@ internal class EpubScrollView(context: Context, private val reader: EpubTextView
         )
 
     init {
+        tag = "epub-scroll"
         isFillViewport = true
         isSaveEnabled = false
         isSaveFromParentEnabled = false
