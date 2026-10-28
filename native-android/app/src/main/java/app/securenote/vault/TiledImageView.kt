@@ -244,6 +244,7 @@ class TiledImageView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
         val saved = canvas.save()
         try {
             canvas.clipRect(0, 0, width, height)
@@ -254,7 +255,6 @@ class TiledImageView(
     }
 
     private fun drawViewport(canvas: Canvas) {
-        super.onDraw(canvas)
         if (closed.get()) return
         if (failed) {
             paint.color = android.graphics.Color.WHITE

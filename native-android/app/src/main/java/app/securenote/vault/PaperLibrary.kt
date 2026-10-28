@@ -21,6 +21,7 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.flowOf
 
 fun isEpubFile(mime: String, name: String = ""): Boolean =
     mime.substringBefore(';').trim().equals("application/epub+zip", true) ||
@@ -92,7 +93,11 @@ fun PaperLibrary(
     val busy by model.busy.collectAsState()
     val pages = model.pages.collectAsLazyPagingItems()
     val folders by
-        remember(parent) { model.store.dao.folderSummaries(parent) }.collectAsState(emptyList())
+        remember(parent, browsing) {
+                if (browsing) model.store.dao.folderSummaries(parent)
+                else flowOf(emptyList<FolderSummary>())
+            }
+            .collectAsState(emptyList())
     val jobs by remember { model.store.dao.importJobs() }.collectAsState(emptyList())
     var folderName by remember(parent) { mutableStateOf("Folders") }
     LaunchedEffect(parent) {
@@ -113,7 +118,12 @@ fun PaperLibrary(
     val callback by rememberUpdatedState(onSelecting)
     LaunchedEffect(selecting) { callback(selecting) }
     DisposableEffect(Unit) { onDispose { callback(false) } }
-    LaunchedEffect(category, query, parent, order, grid) { state.scrollToItem(0) }
+    // Folder rows arrive asynchronously. Reset after their identities arrive so the grid
+    // cannot retain an old file anchor above which the folders were inserted.
+    val folderIds = folders.map { it.folder.id }
+    LaunchedEffect(category, query, parent, browsing, order, grid, folderIds) {
+        state.scrollToItem(0)
+    }
     val filters =
         listOf(
             "all" to "All",
@@ -131,9 +141,13 @@ fun PaperLibrary(
             filters.firstOrNull { it.first == category }?.second?.takeUnless { category == "all" }
                 ?: "Vault"
     val visibleFolders =
-        if (browsing)
-            folders.filter { query.isBlank() || it.folder.name.contains(query, ignoreCase = true) }
-        else emptyList()
+        remember(folders, browsing, query) {
+            if (browsing)
+                folders.filter {
+                    query.isBlank() || it.folder.name.contains(query, ignoreCase = true)
+                }
+            else emptyList()
+        }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val short = maxHeight < 360.dp
         @Composable
