@@ -308,13 +308,18 @@ internal fun DrawingBlock(
                 usePlatformDefaultWidth = false,
                 securePolicy = SecureFlagPolicy.SecureOn,
                 dismissOnClickOutside = false,
+                decorFitsSystemWindows = false,
             ),
     ) {
+        PaperDialogBars()
         Surface(Modifier.fillMaxSize(), color = Paper.Background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
                 val current = remember(block.id) { LiveDrawingStroke() }
                 var color by remember(block.id) { mutableIntStateOf(android.graphics.Color.BLACK) }
                 var thickness by remember(block.id) { mutableFloatStateOf(4f) }
+                val landscape =
+                    androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE
                 var properties by remember { mutableStateOf(false) }
                 var customColor by remember { mutableStateOf(false) }
                 var hex by remember { mutableStateOf("") }
@@ -336,6 +341,115 @@ internal fun DrawingBlock(
                 val pathCache = remember { StrokePathCache() }
                 val paths = remember(strokes, dimensions) { pathCache.resolve(strokes, dimensions) }
                 var options by remember { mutableStateOf(false) }
+                @Composable
+                fun strokeProperties() {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (erasing) "Eraser" else tool,
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            PaperAction("Hide properties", PaperGlyph.Close) {
+                                properties = false
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                        ) {
+                            listOf(
+                                    "Black" to android.graphics.Color.BLACK,
+                                    "Red" to android.graphics.Color.rgb(169, 81, 63),
+                                    "Green" to android.graphics.Color.rgb(47, 106, 76),
+                                    "Blue" to android.graphics.Color.rgb(49, 95, 145),
+                                )
+                                .forEach { (name, value) ->
+                                    IconButton(
+                                        {
+                                            color = value
+                                            erasing = false
+                                            navigating = false
+                                        },
+                                        modifier =
+                                            Modifier.semantics {
+                                                contentDescription = "$name pen"
+                                                selected = color == value && !erasing
+                                            },
+                                    ) {
+                                        Box(
+                                            Modifier.size(30.dp)
+                                                .background(
+                                                    Color(value),
+                                                    androidx.compose.foundation.shape
+                                                        .RoundedCornerShape(10.dp),
+                                                )
+                                                .border(
+                                                    if (color == value) 2.dp else 0.dp,
+                                                    Paper.Accent,
+                                                    androidx.compose.foundation.shape
+                                                        .RoundedCornerShape(10.dp),
+                                                ),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (color == value)
+                                                PaperIcon(
+                                                    PaperGlyph.Check,
+                                                    color = Color.White,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                        }
+                                    }
+                                }
+                            PaperAction("Custom color", PaperGlyph.Add) {
+                                customColor = true
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("Width", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "${thickness.toInt()} px",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        PaperSlider(
+                            thickness,
+                            { thickness = it },
+                            range = 1f..12f,
+                            modifier =
+                                Modifier.height(36.dp).semantics {
+                                    contentDescription = "Pen width"
+                                },
+                        )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("Opacity", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "${(opacity * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        PaperSlider(
+                            opacity,
+                            { opacity = it },
+                            range = .1f..1f,
+                            modifier =
+                                Modifier.height(36.dp).semantics {
+                                    contentDescription = "Pen opacity"
+                                },
+                        )
+                    }
+                }
+                if (properties && landscape)
+                    PaperSheet("Stroke properties", { properties = false }) { strokeProperties() }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Drawing",
@@ -515,118 +629,17 @@ internal fun DrawingBlock(
                                     Stroke(thickness * size.width / 360f, cap = StrokeCap.Round),
                             )
                     }
-                    if (properties)
+                    if (properties && !landscape)
                         Surface(
                             Modifier.align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .heightIn(max = minOf(260.dp, maxHeight * .45f)),
+                                .heightIn(max = minOf(320.dp, maxHeight * .70f)),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             color = Paper.Background,
                             tonalElevation = 3.dp,
                         ) {
-                            Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        if (erasing) "Eraser" else tool,
-                                        Modifier.weight(1f),
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    PaperAction("Hide properties", PaperGlyph.Close) {
-                                        properties = false
-                                    }
-                                }
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly,
-                                ) {
-                                    listOf(
-                                            "Black" to android.graphics.Color.BLACK,
-                                            "Red" to android.graphics.Color.rgb(169, 81, 63),
-                                            "Green" to android.graphics.Color.rgb(47, 106, 76),
-                                            "Blue" to android.graphics.Color.rgb(49, 95, 145),
-                                        )
-                                        .forEach { (name, value) ->
-                                            IconButton(
-                                                {
-                                                    color = value
-                                                    erasing = false
-                                                    navigating = false
-                                                },
-                                                modifier =
-                                                    Modifier.semantics {
-                                                        contentDescription = "$name pen"
-                                                        selected = color == value && !erasing
-                                                    },
-                                            ) {
-                                                Box(
-                                                    Modifier.size(30.dp)
-                                                        .background(
-                                                            Color(value),
-                                                            androidx.compose.foundation.shape
-                                                                .RoundedCornerShape(10.dp),
-                                                        )
-                                                        .border(
-                                                            if (color == value) 2.dp else 0.dp,
-                                                            Paper.Accent,
-                                                            androidx.compose.foundation.shape
-                                                                .RoundedCornerShape(10.dp),
-                                                        ),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    if (color == value)
-                                                        PaperIcon(
-                                                            PaperGlyph.Check,
-                                                            color = Color.White,
-                                                            modifier = Modifier.size(18.dp),
-                                                        )
-                                                }
-                                            }
-                                        }
-                                    PaperAction("Custom color", PaperGlyph.Add) {
-                                        customColor = true
-                                    }
-                                }
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Width", style = MaterialTheme.typography.labelMedium)
-                                    Text(
-                                        "${thickness.toInt()} px",
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                                PaperSlider(
-                                    thickness,
-                                    { thickness = it },
-                                    range = 1f..12f,
-                                    modifier =
-                                        Modifier.height(36.dp).semantics {
-                                            contentDescription = "Pen width"
-                                        },
-                                )
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Opacity", style = MaterialTheme.typography.labelMedium)
-                                    Text(
-                                        "${(opacity * 100).toInt()}%",
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                                PaperSlider(
-                                    opacity,
-                                    { opacity = it },
-                                    range = .1f..1f,
-                                    modifier =
-                                        Modifier.height(36.dp).semantics {
-                                            contentDescription = "Pen opacity"
-                                        },
-                                )
+                            Column(Modifier.verticalScroll(rememberScrollState())) {
+                                strokeProperties()
                             }
                         }
                 }

@@ -352,6 +352,7 @@ fun PaperLibrary(
                                 Checkbox(
                                     checked,
                                     { chosen = if (it) chosen + item.id else chosen - item.id },
+                                    modifier = Modifier.testTag("select-${item.id}"),
                                 )
                             Box(Modifier.weight(1f)) {
                                 VaultEntry(

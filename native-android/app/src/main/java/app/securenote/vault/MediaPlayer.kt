@@ -24,7 +24,7 @@ import androidx.compose.ui.window.*
 import androidx.media3.common.*
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.*
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.*
 
@@ -59,7 +59,9 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 .setSeekBackIncrementMs(10000)
                 .setSeekForwardIncrementMs(10000)
                 .setMediaSourceFactory(
-                    DefaultMediaSourceFactory(DataSource.Factory { VaultMediaSource(model.store) })
+                    ProgressiveMediaSource.Factory(
+                        DataSource.Factory { VaultMediaSource(model.store) }
+                    )
                 )
                 .setLoadControl(
                     DefaultLoadControl.Builder()
@@ -84,7 +86,9 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 )
             queue = if (siblings.any { it.id == id }) siblings else listOf(selected) + siblings
             player.setMediaItems(
-                queue.map { MediaItem.fromUri("vault://${it.id}") },
+                queue.map {
+                    MediaItem.Builder().setUri("vault://${it.id}").setMimeType(it.mime).build()
+                },
                 queue.indexOfFirst { it.id == id }.coerceAtLeast(0),
                 0,
             )
@@ -92,6 +96,12 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (BuildConfig.DEBUG)
+                android.util.Log.w(
+                    "VaultMedia",
+                    "Setup failed: ${e.javaClass.name}\n" +
+                        e.stackTrace.take(12).joinToString("\n"),
+                )
             error = "This media could not be opened. The encrypted file is kept."
         }
     }
@@ -182,6 +192,7 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 if (error.isNotEmpty())
                     Text(
                         error,
+                        modifier = Modifier.testTag("media-error"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )

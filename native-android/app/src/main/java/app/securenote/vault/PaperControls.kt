@@ -64,16 +64,7 @@ internal fun PaperSheet(
                 decorFitsSystemWindows = false,
             ),
     ) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            window?.let {
-                androidx.core.view.WindowCompat.getInsetsController(it, view)
-                    .isAppearanceLightNavigationBars = true
-            }
-            onDispose {}
-        }
+        PaperDialogBars()
         BoxWithConstraints(
             Modifier.fillMaxSize().safeDrawingPadding().imePadding(),
             contentAlignment = Alignment.BottomCenter,
@@ -158,4 +149,21 @@ internal fun Modifier.keepInputVisible(): Modifier {
         }
     }
     return this.bringIntoViewRequester(requester).onFocusChanged { focused = it.isFocused }
+}
+
+/** Apply the same readable system bars to every full-screen secure dialog. */
+@Composable
+internal fun PaperDialogBars() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        window?.let {
+            androidx.core.view.WindowCompat.getInsetsController(it, view).apply {
+                isAppearanceLightStatusBars = true
+                isAppearanceLightNavigationBars = true
+            }
+        }
+        onDispose {}
+    }
 }

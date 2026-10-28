@@ -122,26 +122,32 @@ class VisualWalkthroughTest {
                 home()
                 tool("Select", "Select items").performClick()
                 rule.onNodeWithTag("vault-library").performScrollToIndex(2)
-                rule.waitUntil(15000) {
-                    rule.onAllNodes(isToggleable()).fetchSemanticsNodes().isNotEmpty()
-                }
-                rule.onAllNodes(isToggleable()).onFirst().performClick()
+                rule
+                    .onNodeWithTag("select-${ids.getValue("audio")}")
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsOn()
+                waitText("1 selected")
                 rule.onNodeWithTag("vault-library").performScrollToIndex(0)
                 save("selection")
                 rule.onNodeWithText("Move", substring = false).performClick()
+                waitText("Move to folder")
                 save("move-picker")
             }
             step("group-by-type") {
                 home()
                 tool("Select", "Select items").performClick()
                 rule.onNodeWithTag("vault-library").performScrollToIndex(2)
-                rule.waitUntil(15000) {
-                    rule.onAllNodes(isToggleable()).fetchSemanticsNodes().isNotEmpty()
-                }
-                rule.onAllNodes(isToggleable()).onFirst().performClick()
+                rule
+                    .onNodeWithTag("select-${ids.getValue("audio")}")
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsOn()
+                waitText("1 selected")
                 rule.onNodeWithTag("vault-library").performScrollToIndex(0)
                 rule.onNodeWithText("More", substring = false).performClick()
                 rule.onNodeWithText("By type", substring = false).performScrollTo().performClick()
+                waitText("Arrange by type?")
                 save("group-confirmation")
             }
             step("add-dialog") {
@@ -322,7 +328,8 @@ class VisualWalkthroughTest {
                     .onNodeWithContentDescription("Play", substring = false)
                     .performScrollTo()
                     .performClick()
-                Thread.sleep(1000)
+                rule.waitUntil(15000) { model.playing }
+                rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("audio-playing")
             }
             step("video") {
@@ -333,7 +340,8 @@ class VisualWalkthroughTest {
                     .onNodeWithContentDescription("Play", substring = false)
                     .performScrollTo()
                     .performClick()
-                Thread.sleep(1000)
+                rule.waitUntil(15000) { model.playing }
+                rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("video-playing")
             }
             step("unsupported") {

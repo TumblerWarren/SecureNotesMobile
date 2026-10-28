@@ -21,5 +21,6 @@ adb shell rm -rf /sdcard/Download/SecureNoteSyntheticWalkthrough /sdcard/Movies/
 git rev-parse HEAD > app/build/reports/visual-walkthrough/source-commit.txt
 python3 tools/visual_contact_sheets.py || test_result=1
 fi
+adb logcat -d -s VaultMedia:W || true
 adb logcat -d -s AndroidRuntime:E > app/build/reports/runtime-errors.log || true
 exit "$test_result"

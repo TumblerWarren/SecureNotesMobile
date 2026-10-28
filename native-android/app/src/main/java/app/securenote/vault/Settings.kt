@@ -50,6 +50,7 @@ fun SettingsDialog(
                 decorFitsSystemWindows = false,
             ),
     ) {
+        PaperDialogBars()
         Surface(Modifier.fillMaxSize(), color = Paper.Background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().secureEditing()) {
                 Row(
