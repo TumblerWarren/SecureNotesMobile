@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -198,6 +199,15 @@ internal class EpubScrollView(context: Context, private val reader: EpubTextView
     init {
         tag = "epub-scroll"
         isFillViewport = true
+        clipChildren = true
+        clipToPadding = true
+        outlineProvider =
+            object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setRect(0, 0, view.width, view.height)
+                }
+            }
+        clipToOutline = true
         isSaveEnabled = false
         isSaveFromParentEnabled = false
         overScrollMode = OVER_SCROLL_NEVER
@@ -430,7 +440,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 color = Paper.Accent,
                 trackColor = Paper.Inset,
             )
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
             if (failure.isNotEmpty())
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
