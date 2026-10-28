@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -190,23 +191,16 @@ fun PaperLibrary(
                 },
                 leadingIcon = { PaperIcon(PaperGlyph.Search) },
                 trailingIcon = {
-                    if (query.isNotEmpty())
-                        PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
-                    else
-                        Box {
-                            PaperAction("File types", PaperGlyph.Sliders) { types = true }
-                            DropdownMenu(types, { types = false }) {
-                                filters.forEach { (key, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            model.showLibrary(key)
-                                            types = false
-                                        },
-                                    )
-                                }
+                    Row {
+                        if (query.isNotEmpty())
+                            PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
+                        if (short)
+                            PaperAction("File types", PaperGlyph.Add) {
+                                inputFocus.clearFocus()
+                                inputKeyboard?.hide()
+                                types = true
                             }
-                        }
+                    }
                 },
                 shape = RoundedCornerShape(16.dp),
                 colors =
@@ -219,7 +213,10 @@ fun PaperLibrary(
         }
         Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                Modifier.fillMaxWidth()
+                    .background(Paper.Header)
+                    .border(BorderStroke(1.dp, Paper.Line))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (selecting)
@@ -312,18 +309,34 @@ fun PaperLibrary(
                     Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
                 search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
                 Row(
-                    Modifier.fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    filters.forEach { (key, label) ->
+                    FilterChip(
+                        selected = category == "all",
+                        onClick = { model.showLibrary("all") },
+                        label = { Text("All") },
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    if (category != "all")
                         FilterChip(
-                            selected = category == key,
-                            onClick = { model.showLibrary(key) },
-                            label = { Text(label, maxLines = 1) },
+                            selected = true,
+                            onClick = { types = true },
+                            modifier = Modifier.weight(1f, fill = false),
+                            label = {
+                                Text(
+                                    filters.firstOrNull { it.first == category }?.second ?: "Files",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
                             shape = RoundedCornerShape(14.dp),
                         )
+                    PaperAction("File types", PaperGlyph.Add) {
+                        inputFocus.clearFocus()
+                        inputKeyboard?.hide()
+                        types = true
                     }
                 }
             }
@@ -490,6 +503,47 @@ fun PaperLibrary(
             }
         }
     }
+    if (types)
+        PaperSheet("File types", { types = false }) {
+            filters.forEach { (key, label) ->
+                val glyph =
+                    when (key) {
+                        "all" -> PaperGlyph.Vault
+                        "notes" -> PaperGlyph.Note
+                        "images" -> PaperGlyph.Image
+                        "videos" -> PaperGlyph.Media
+                        "audio" -> PaperGlyph.Audio
+                        "epub" -> PaperGlyph.Book
+                        else -> PaperGlyph.Document
+                    }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (category == key) Paper.AccentSoft else Paper.Background,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .testTag("file-type-$key")
+                            .selectable(
+                                selected = category == key,
+                                role = androidx.compose.ui.semantics.Role.RadioButton,
+                                onClick = {
+                                    model.showLibrary(key)
+                                    types = false
+                                },
+                            )
+                            .heightIn(min = 52.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        PaperIcon(glyph)
+                        Text(label, Modifier.weight(1f))
+                        if (category == key) PaperIcon(PaperGlyph.Check, "Selected")
+                    }
+                }
+            }
+        }
     if (creating) FolderNameDialog(model, null, if (browsing) parent else null) { creating = false }
     if (moving)
         FolderPicker(model, { moving = false }) {

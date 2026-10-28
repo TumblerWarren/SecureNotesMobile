@@ -106,6 +106,17 @@ class VisualWalkthroughTest {
                 home()
                 save("library-top")
             }
+            step("file-type-overlay") {
+                home()
+                tool("File types").performClick()
+                save("file-types-overlay")
+                rule.onNodeWithTag("file-type-epub").performScrollTo().performClick()
+                rule.runOnIdle { assertTrue(model.category.value == "epub") }
+                save("file-type-active")
+                tool("File types").performClick()
+                rule.onNodeWithTag("file-type-all").performScrollTo().performClick()
+                rule.runOnIdle { assertTrue(model.category.value == "all") }
+            }
             step("library-scrolled") {
                 rule.onNodeWithTag("vault-library").performTouchInput { swipeUp() }
                 save("library-scrolled")

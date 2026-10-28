@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 object Paper {
     val Background = Color(0xFFF6F1E7)
     val Surface = Color(0xFFFFFCF6)
+    val Header = Color(0xFFECE5D8)
     val Inset = Color(0xFFEDE7DC)
     val Ink = Color(0xFF272B28)
     val Muted = Color(0xFF686359)

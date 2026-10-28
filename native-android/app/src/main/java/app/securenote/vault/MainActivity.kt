@@ -256,17 +256,27 @@ internal fun VaultApp(model: VaultModel) {
                 )
             when {
                 !open ->
-                    Column(
-                        Modifier.weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(
-                                horizontal = 16.dp,
-                                vertical = if (hideChrome) 4.dp else 16.dp,
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        LockScreen(model, busy, hideChrome)
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                        val viewportHeight = maxHeight
+                        Column(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Column(
+                                Modifier.widthIn(max = 420.dp)
+                                    .fillMaxWidth()
+                                    .heightIn(min = viewportHeight)
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = if (hideChrome) 4.dp else 16.dp,
+                                    ),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                LockScreen(model, busy, hideChrome)
+                            }
+                        }
                     }
                 recovery != null ->
                     Column(
@@ -482,6 +492,8 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
             if (recoveryMode) "A way back in."
             else if (creating) "A private place for everything." else "Welcome back.",
             style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Text(
             if (recoveryMode) "Use your recovery key to choose a new password."
@@ -489,6 +501,8 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
                 "Your thoughts, documents and moments. Kept on this device, behind your password."
             else "Enter your password to open your vault.",
             color = Paper.Muted,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
     if (recoveryMode)
