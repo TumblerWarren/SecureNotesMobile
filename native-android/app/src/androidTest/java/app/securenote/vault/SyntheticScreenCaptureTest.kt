@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -103,10 +104,11 @@ class SyntheticScreenCaptureTest {
         try {
             rule.setContent {
                 val current = LocalContext.current
+                val configuration = LocalConfiguration.current
                 val configured =
-                    remember(current, font) {
+                    remember(current, configuration, font) {
                         current.createConfigurationContext(
-                            Configuration(current.resources.configuration).apply {
+                            Configuration(configuration).apply {
                                 fontScale = font
                             }
                         )
@@ -192,6 +194,27 @@ class SyntheticScreenCaptureTest {
         path.parentFile!!.mkdirs()
         path.outputStream().use {
             image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val values =
+                android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                    put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(
+                        android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        "Pictures/SecureNoteSyntheticTests",
+                    )
+                }
+            val uri =
+                checkNotNull(
+                    context.contentResolver.insert(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        values,
+                    )
+                )
+            context.contentResolver.openOutputStream(uri)!!.use {
+                image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
         }
     }
 }

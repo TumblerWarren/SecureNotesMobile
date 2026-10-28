@@ -5,7 +5,8 @@ test_result=0
 ./gradlew :app:connectedDebugAndroidTest || test_result=$?
 mkdir -p app/build/reports/ui-screenshots
 for capture in normal-library normal-notes normal-folders large-library large-notes large-folders normal-pdf large-pdf; do
-  adb exec-out run-as com.anonymous.SecureNotesMobile.nativepreview cat "cache/ui-screenshots/$capture.png" > "app/build/reports/ui-screenshots/$capture.png" || true
+  adb pull "/sdcard/Pictures/SecureNoteSyntheticTests/$capture.png" "app/build/reports/ui-screenshots/$capture.png" || true
+  adb shell rm -f "/sdcard/Pictures/SecureNoteSyntheticTests/$capture.png" || true
 done
 adb logcat -d -s AndroidRuntime:E > app/build/reports/runtime-errors.log || true
 exit "$test_result"
