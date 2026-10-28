@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
@@ -331,7 +332,7 @@ internal fun VaultApp(model: VaultModel) {
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     listOf(
-                            Triple("all", "Vault", PaperGlyph.Vault),
+                            Triple("all", "Vault", PaperGlyph.Shield),
                             Triple("notes", "Notes", PaperGlyph.Note),
                             Triple("folders", "Folders", PaperGlyph.Vault),
                             Triple("settings", "Settings", PaperGlyph.Settings),
