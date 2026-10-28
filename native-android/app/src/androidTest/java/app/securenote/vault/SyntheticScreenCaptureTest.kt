@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -100,27 +99,19 @@ class SyntheticScreenCaptureTest {
             model = VaultModel(context.applicationContext as Application, store)
             model.unlocked.value = true
         }
-        var visible by mutableStateOf(true)
+        val configured =
+            rule.activity.createConfigurationContext(
+                Configuration(rule.activity.resources.configuration).apply { fontScale = font }
+            )
+        val density = rule.activity.resources.displayMetrics.density
         try {
             rule.setContent {
-                val current = LocalContext.current
-                val configuration = LocalConfiguration.current
-                val configured =
-                    remember(current, configuration, font) {
-                        current.createConfigurationContext(
-                            Configuration(configuration).apply {
-                                fontScale = font
-                            }
-                        )
-                    }
-                val density = LocalDensity.current
-                if (visible)
-                    CompositionLocalProvider(
-                        LocalContext provides configured,
-                        LocalDensity provides Density(density.density, font),
-                    ) {
-                        PaperTheme { VaultApp(model) }
-                    }
+                CompositionLocalProvider(
+                    LocalContext provides configured,
+                    LocalDensity provides Density(density, font),
+                ) {
+                    PaperTheme { VaultApp(model) }
+                }
             }
             rule.waitUntil(15000) {
                 rule
@@ -171,9 +162,11 @@ class SyntheticScreenCaptureTest {
                     .isNotEmpty()
             }
             save(prefix + "-folders")
+        } catch (e: Throwable) {
+            println("CAPTURE_FAILURE=" + e.stackTraceToString())
+            throw e
         } finally {
-            rule.runOnIdle { visible = false }
-            rule.waitForIdle()
+            rule.activityRule.scenario.close()
             runBlocking { model.flushWrites() }
             store.close()
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
