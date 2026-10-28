@@ -449,6 +449,7 @@ class VisualWalkthroughTest {
                 save("epub-reading")
                 rule.onNodeWithTag("epub-content").performTouchInput { swipeLeft() }
                 rule.waitForIdle()
+                rule.onNodeWithText("Chapter 1 / 2", substring = false).assertExists()
                 save("epub-swiped")
                 rule.onNodeWithContentDescription("Contents", substring = false).performClick()
                 save("epub-contents")

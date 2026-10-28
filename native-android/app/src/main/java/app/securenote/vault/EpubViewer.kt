@@ -12,27 +12,27 @@ import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.text.style.URLSpan
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ScrollView
 import android.widget.TextView
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnLayout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -185,11 +185,107 @@ internal class EpubTextView(context: Context) : TextView(context) {
     }
 }
 
+/** Native scrolling keeps TextView measurement and swipe paging in the same coordinate system. */
+internal class EpubScrollView(context: Context, private val reader: EpubTextView) :
+    ScrollView(context) {
+    var onPage: (Int) -> Unit = {}
+    var onProgress: (Int, Int, Int) -> Unit = { _, _, _ -> }
+    private var appliedFrame: EpubFrame? = null
+    private var restored = false
+    private val gestures =
+        GestureDetector(
+            context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(event: MotionEvent): Boolean = true
+
+                override fun onFling(
+                    first: MotionEvent?,
+                    last: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float,
+                ): Boolean {
+                    if (first == null) return false
+                    val dx = last.x - first.x
+                    val dy = last.y - first.y
+                    if (
+                        kotlin.math.abs(dx) < 48 * resources.displayMetrics.density ||
+                            kotlin.math.abs(dx) < kotlin.math.abs(dy) * 1.5f
+                    )
+                        return false
+                    onPage(if (dx < 0) 1 else -1)
+                    return true
+                }
+            },
+        )
+
+    init {
+        isFillViewport = true
+        isSaveEnabled = false
+        isSaveFromParentEnabled = false
+        overScrollMode = OVER_SCROLL_NEVER
+        addView(
+            reader,
+            LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+    }
+
+    val maximum: Int
+        get() =
+            ((getChildAt(0)?.height ?: 0) - height + paddingTop + paddingBottom).coerceAtLeast(0)
+
+    private fun report() = onProgress(scrollY, maximum, height)
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        report()
+    }
+
+    override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
+        super.onScrollChanged(l, t, oldl, oldt)
+        report()
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (gestures.onTouchEvent(event) && event.actionMasked == MotionEvent.ACTION_UP) {
+            val cancel = MotionEvent.obtain(event)
+            cancel.action = MotionEvent.ACTION_CANCEL
+            super.dispatchTouchEvent(cancel)
+            cancel.recycle()
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    fun display(frame: EpubFrame, font: Int, restoreOffset: Int, onLink: (String) -> Unit) {
+        val changed = appliedFrame !== frame
+        reader.display(frame, font, onLink)
+        if (changed) {
+            val target = if (!restored) restoreOffset else 0
+            restored = true
+            appliedFrame = frame
+            doOnLayout {
+                scrollTo(0, target.coerceIn(0, maximum))
+                report()
+            }
+        }
+    }
+
+    fun clearContent() {
+        reader.clearContent()
+        appliedFrame = null
+        onPage = {}
+        onProgress = { _, _, _ -> }
+    }
+}
+
 @Composable
 internal fun EpubViewer(model: VaultModel, id: String) {
     val context = LocalContext.current
     val client = remember(id) { EpubClient(context) }
     val view = remember(id) { EpubTextView(context) }
+    val readerScroll = remember(id) { EpubScrollView(context, view) }
+    var scrollOffset by remember(id) { mutableIntStateOf(0) }
+    var scrollMaximum by remember(id) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     var frame by remember(id) { mutableStateOf<EpubFrame?>(null) }
     var catalog by remember(id) { mutableStateOf<EpubCatalog?>(null) }
@@ -199,15 +295,10 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     var contents by remember(id) { mutableStateOf(false) }
     var viewportHeight by remember { mutableIntStateOf(0) }
     var initialPosition by remember(id) { mutableStateOf<EpubPosition?>(null) }
-    // Reading position belongs only in the encrypted index, never saved-instance state.
-    val scroll =
-        remember(id, frame != null) {
-            ScrollState(if (frame != null) initialPosition?.scroll ?: 0 else 0)
-        }
     fun savePosition(value: EpubFrame) {
         model.queueReadingState(
             id,
-            EpubPosition(value.chapter, value.section, font, scroll.value).encode(),
+            EpubPosition(value.chapter, value.section, font, scrollOffset).encode(),
         )
     }
     fun navigate(action: suspend () -> EpubFrame) {
@@ -221,7 +312,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                     return@launch
                 }
                 frame = next
-                scroll.scrollTo(0)
+                readerScroll.scrollTo(0, 0)
                 savePosition(next)
             } catch (e: CancellationException) {
                 throw e
@@ -237,23 +328,21 @@ internal fun EpubViewer(model: VaultModel, id: String) {
         if (loading || failure.isNotEmpty()) return
         val step = (viewportHeight * .9f).toInt().coerceAtLeast(1)
         if (
-            (direction > 0 && scroll.value < scroll.maxValue) || (direction < 0 && scroll.value > 0)
+            (direction > 0 && scrollOffset < scrollMaximum) || (direction < 0 && scrollOffset > 0)
         ) {
-            scope.launch {
-                scroll.animateScrollTo(
-                    (scroll.value + direction * step).coerceIn(0, scroll.maxValue)
-                )
-            }
+            readerScroll.smoothScrollTo(
+                0,
+                (scrollOffset + direction * step).coerceIn(0, scrollMaximum),
+            )
         } else if (
             (direction > 0 && frame?.next == true) || (direction < 0 && frame?.previous == true)
         ) {
             navigate { client.move(direction) }
         }
     }
-    val latestTurn by rememberUpdatedState<(Int) -> Unit>(::turn)
-    DisposableEffect(client, view) {
+    DisposableEffect(client, readerScroll) {
         val unregister = model.onLock {
-            view.clearContent()
+            readerScroll.clearContent()
             frame?.close()
             frame = null
             catalog = null
@@ -261,7 +350,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
         }
         onDispose {
             unregister()
-            view.clearContent()
+            readerScroll.clearContent()
             frame?.close()
             frame = null
             catalog = null
@@ -292,9 +381,9 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             loading = false
         }
     }
-    LaunchedEffect(frame?.chapter, frame?.section, font, scroll) {
+    LaunchedEffect(frame?.chapter, frame?.section, font) {
         if (frame == null) return@LaunchedEffect
-        snapshotFlow { scroll.value }
+        snapshotFlow { scrollOffset }
             .collect { offset ->
                 val current = frame
                 if (current != null && model.unlocked.value && model.store.isOpen) {
@@ -344,27 +433,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 color = Paper.Accent,
                 trackColor = Paper.Inset,
             )
-        Box(
-            Modifier.weight(1f)
-                .fillMaxWidth()
-                .onSizeChanged { viewportHeight = it.height }
-                .pointerInput(Unit) {
-                    var dragged = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { dragged = 0f },
-                        onHorizontalDrag = { change, amount ->
-                            change.consume()
-                            dragged += amount
-                        },
-                        onDragCancel = { dragged = 0f },
-                        onDragEnd = {
-                            if (kotlin.math.abs(dragged) > 48.dp.toPx())
-                                latestTurn(if (dragged < 0) 1 else -1)
-                            dragged = 0f
-                        },
-                    )
-                }
-        ) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
             if (failure.isNotEmpty())
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
@@ -378,21 +447,29 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                         color = Paper.Muted,
                     )
                 }
-            else
-                Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(PaperSpacing.Screen)) {
-                    val current = frame
-                    if (current != null)
-                        AndroidView(
-                            factory = { view },
-                            modifier = Modifier.fillMaxWidth().testTag("epub-content"),
-                            update = {
-                                it.display(current, font) { link ->
-                                    navigate { client.follow(link) }
-                                }
-                            },
-                            onRelease = { it.clearContent() },
-                        )
-                }
+            else {
+                val current = frame
+                if (current != null)
+                    AndroidView(
+                        factory = { readerScroll },
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .padding(PaperSpacing.Screen)
+                                .testTag("epub-content"),
+                        update = {
+                            it.onPage = ::turn
+                            it.onProgress = { offset, maximum, height ->
+                                scrollOffset = offset
+                                scrollMaximum = maximum
+                                viewportHeight = height
+                            }
+                            it.display(current, font, initialPosition?.scroll ?: 0) { link ->
+                                navigate { client.follow(link) }
+                            }
+                        },
+                        onRelease = { it.clearContent() },
+                    )
+            }
         }
         HorizontalDivider(color = Paper.Line)
         Row(
@@ -402,7 +479,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             IconButton(
                 { turn(-1) },
                 enabled =
-                    (frame?.previous == true || scroll.value > 0) && !loading && failure.isEmpty(),
+                    (frame?.previous == true || scrollOffset > 0) && !loading && failure.isEmpty(),
             ) {
                 PaperIcon(PaperGlyph.Back, "Previous section")
             }
@@ -427,7 +504,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             IconButton(
                 { turn(1) },
                 enabled =
-                    (frame?.next == true || scroll.value < scroll.maxValue) &&
+                    (frame?.next == true || scrollOffset < scrollMaximum) &&
                         !loading &&
                         failure.isEmpty(),
             ) {
