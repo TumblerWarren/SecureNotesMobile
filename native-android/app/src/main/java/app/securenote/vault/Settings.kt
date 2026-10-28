@@ -51,27 +51,34 @@ fun SettingsDialog(
             ),
     ) {
         PaperDialogBars()
+        val keyboardOpen =
+            WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+        val compactKeyboard =
+            keyboardOpen &&
+                androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
         Surface(Modifier.fillMaxSize(), color = Paper.Background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().secureEditing()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
-                        if (changing) {
-                            changing = false
-                            clear()
-                        } else dismiss()
+                if (!compactKeyboard)
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
+                            if (changing) {
+                                changing = false
+                                clear()
+                            } else dismiss()
+                        }
+                        Text(
+                            if (changing) "Change password" else "Settings",
+                            Modifier.weight(1f).padding(horizontal = 8.dp),
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
                     }
-                    Text(
-                        if (changing) "Change password" else "Settings",
-                        Modifier.weight(1f).padding(horizontal = 8.dp),
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
-                }
                 HorizontalDivider(color = Paper.Line)
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Column(
@@ -81,12 +88,13 @@ fun SettingsDialog(
                         .padding(if (changing) 16.dp else 8.dp)
                 ) {
                     if (changing) {
-                        Text(
-                            "At least 16 characters.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Paper.Muted,
-                        )
-                        Spacer(Modifier.height(12.dp))
+                        if (!keyboardOpen)
+                            Text(
+                                "At least 16 characters.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Paper.Muted,
+                            )
+                        if (!keyboardOpen) Spacer(Modifier.height(12.dp))
                         listOf("Current password", "New password", "Confirm password")
                             .forEachIndexed { index, label ->
                                 OutlinedTextField(

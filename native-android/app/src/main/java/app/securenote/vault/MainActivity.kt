@@ -181,7 +181,7 @@ internal fun VaultApp(model: VaultModel) {
             .semantics { testTagsAsResourceId = true }
             .secureEditing()
     ) {
-        if (!open || recovery != null) {
+        if ((!open || recovery != null) && !imeVisible) {
             Row(
                 Modifier.fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -461,18 +461,21 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     val creating = !model.store.exists
-    Text(
-        if (recoveryMode) "A way back in."
-        else if (creating) "A private place for everything." else "Welcome back.",
-        style = MaterialTheme.typography.headlineSmall,
-    )
-    Text(
-        if (recoveryMode) "Use your recovery key to choose a new password."
-        else if (creating)
-            "Your thoughts, documents and moments. Kept on this device, behind your password."
-        else "Enter your password to open your vault.",
-        color = Paper.Muted,
-    )
+    val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    if (!keyboardOpen) {
+        Text(
+            if (recoveryMode) "A way back in."
+            else if (creating) "A private place for everything." else "Welcome back.",
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(
+            if (recoveryMode) "Use your recovery key to choose a new password."
+            else if (creating)
+                "Your thoughts, documents and moments. Kept on this device, behind your password."
+            else "Enter your password to open your vault.",
+            color = Paper.Muted,
+        )
+    }
     if (recoveryMode)
         OutlinedTextField(
             secret,
@@ -594,8 +597,8 @@ private fun ItemScreen(model: VaultModel, id: String) {
     val density = LocalDensity.current
     val compactKeyboard =
         WindowInsets.ime.getBottom(density) > 0 &&
-            androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height /
-                density.density < 480
+            androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
     Column(Modifier.fillMaxSize()) {
         if (!compactKeyboard)
             Row(

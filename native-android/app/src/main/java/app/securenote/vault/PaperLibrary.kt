@@ -49,6 +49,9 @@ fun fileGlyph(mime: String, name: String = ""): PaperGlyph =
         else -> PaperGlyph.Document
     }
 
+internal fun countLabel(count: Int, singular: String): String =
+    "$count $singular" + if (count == 1) "" else "s"
+
 fun fileSize(size: Long): String {
     if (size < 1024) return "$size B"
     if (size < 1024L * 1024) return "${size / 1024} KB"
@@ -223,8 +226,13 @@ fun PaperLibrary(
                     )
                     if (!short && !selecting)
                         Text(
-                            "${pages.itemCount} items" +
-                                if (browsing && parent == null) " · Unfiled" else "",
+                            if (
+                                pages.loadState.refresh is LoadState.Loading && pages.itemCount == 0
+                            )
+                                "Loading…"
+                            else
+                                countLabel(pages.itemCount, "item") +
+                                    if (browsing && parent == null) " · Unfiled" else "",
                             style = MaterialTheme.typography.labelSmall,
                             color = Paper.Muted,
                             maxLines = 1,

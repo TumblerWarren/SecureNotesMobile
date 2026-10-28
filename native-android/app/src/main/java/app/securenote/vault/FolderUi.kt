@@ -160,8 +160,9 @@ internal fun FolderRow(model: VaultModel, summary: FolderSummary) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${summary.fileCount} files" +
-                    (if (summary.childCount > 0) " · ${summary.childCount} folders" else "") +
+                countLabel(summary.fileCount, "file") +
+                    (if (summary.childCount > 0) " · ${countLabel(summary.childCount, "folder")}"
+                    else "") +
                     " · ${fileSize(summary.totalSize)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = Paper.Muted,

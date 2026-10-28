@@ -396,51 +396,57 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 )
             val available =
                 androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .55f
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = available), state = list) {
-                items(chapters.size) { index ->
-                    val label = chapters[index]
-                    val active = index == frame?.chapter
-                    Surface(
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                        color = if (active) Paper.AccentSoft else Paper.Background,
+            @Composable
+            fun chapterRow(index: Int) {
+                val label = chapters[index]
+                val active = index == frame?.chapter
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = if (active) Paper.AccentSoft else Paper.Background,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable {
+                                contents = false
+                                navigate { client.go(index) }
+                            }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .heightIn(min = 56.dp)
-                                .clickable {
-                                    contents = false
-                                    navigate { client.go(index) }
-                                }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (active)
-                                PaperIcon(
-                                    PaperGlyph.Play,
-                                    modifier = Modifier.size(16.dp),
-                                    color = Paper.Accent,
-                                )
-                            Text(
-                                "${index + 1}",
-                                Modifier.padding(horizontal = 12.dp),
-                                style = MaterialTheme.typography.bodyMedium,
+                        if (active)
+                            PaperIcon(
+                                PaperGlyph.Play,
+                                modifier = Modifier.size(16.dp),
+                                color = Paper.Accent,
                             )
-                            Text(
-                                label,
-                                Modifier.weight(1f),
-                                maxLines = 2,
-                                style = MaterialTheme.typography.bodyMedium,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        Text(
+                            "${index + 1}",
+                            Modifier.padding(horizontal = 12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            label,
+                            Modifier.weight(1f),
+                            maxLines = 2,
+                            style = MaterialTheme.typography.bodyMedium,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        if (active)
+                            PaperIcon(
+                                PaperGlyph.Check,
+                                modifier = Modifier.size(16.dp),
+                                color = Paper.Accent,
                             )
-                            if (active)
-                                PaperIcon(
-                                    PaperGlyph.Check,
-                                    modifier = Modifier.size(16.dp),
-                                    color = Paper.Accent,
-                                )
-                        }
                     }
-                    Spacer(Modifier.height(4.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            if (chapters.size <= 8) {
+                chapters.indices.forEach { chapterRow(it) }
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = available), state = list) {
+                    items(chapters.size) { chapterRow(it) }
                 }
             }
         }

@@ -242,6 +242,10 @@ class VisualWalkthroughTest {
                     .onNodeWithContentDescription("Add column", substring = false)
                     .performScrollTo()
                     .performClick()
+                waitDescription("Cell 1, 3")
+                rule
+                    .onNodeWithContentDescription("Cell 1, 3", substring = false)
+                    .assertIsDisplayed()
                 save("table-wide")
             }
             step("drawing") {
@@ -267,6 +271,10 @@ class VisualWalkthroughTest {
                 rule
                     .onNodeWithContentDescription("Color & stroke", substring = false)
                     .performClick()
+                rule
+                    .onNodeWithContentDescription("Pen opacity", substring = false)
+                    .performScrollTo()
+                    .assertIsDisplayed()
                 save("drawing-properties")
             }
             step("pdf") {
@@ -332,6 +340,27 @@ class VisualWalkthroughTest {
                 rule.waitUntil(15000) { model.playing }
                 rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("audio-playing")
+                rule
+                    .onNodeWithContentDescription("Queue", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                waitText("Queue")
+                save("audio-queue")
+                rule.onNodeWithContentDescription("Close", substring = false).performClick()
+                rule
+                    .onNodeWithContentDescription("Playback settings", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                waitText("Volume")
+                save("audio-settings")
+                rule.onNodeWithContentDescription("Close", substring = false).performClick()
+                rule
+                    .onNodeWithContentDescription("Sleep timer", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                waitText("15 minutes")
+                save("audio-timer")
+                rule.onNodeWithContentDescription("Close", substring = false).performClick()
             }
             step("video") {
                 open(ids.getValue("video"))
@@ -344,6 +373,22 @@ class VisualWalkthroughTest {
                 rule.waitUntil(15000) { model.playing }
                 rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("video-playing")
+                rule
+                    .onNodeWithContentDescription("Playback settings", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                waitText("Captions")
+                save("video-settings")
+                rule.onNodeWithContentDescription("Close", substring = false).performClick()
+                rule
+                    .onNodeWithContentDescription("Full screen", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                waitDescription("Close full screen")
+                save("video-fullscreen")
+                rule
+                    .onNodeWithContentDescription("Close full screen", substring = false)
+                    .performClick()
             }
             step("unsupported") {
                 open(ids.getValue("document"))

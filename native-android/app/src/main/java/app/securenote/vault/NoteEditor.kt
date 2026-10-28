@@ -586,7 +586,7 @@ private fun TableBlock(
                     enabled = table.columns < NoteTable.MAX_COLUMNS,
                 ) {
                     update(table.addColumn())
-                    scope.launch {
+                    scope.launch(kotlinx.coroutines.Dispatchers.Main.immediate) {
                         kotlinx.coroutines.delay(100)
                         horizontal.animateScrollTo(horizontal.maxValue)
                     }

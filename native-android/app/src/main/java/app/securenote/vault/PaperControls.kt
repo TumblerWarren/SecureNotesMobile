@@ -144,8 +144,10 @@ internal fun Modifier.keepInputVisible(): Modifier {
     val ime = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
     LaunchedEffect(focused, ime) {
         if (focused) {
-            kotlinx.coroutines.delay(180)
-            requester.bringIntoView()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                kotlinx.coroutines.delay(180)
+                requester.bringIntoView()
+            }
         }
     }
     return this.bringIntoViewRequester(requester).onFocusChanged { focused = it.isFocused }

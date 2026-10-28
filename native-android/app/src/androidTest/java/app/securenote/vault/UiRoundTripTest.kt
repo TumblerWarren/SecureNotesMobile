@@ -139,6 +139,7 @@ class UiRoundTripTest {
         }
         val mediaId =
             kotlinx.coroutines.runBlocking {
+                model.store.importBytes("Second playback.wav", "audio/wav", wav.array())
                 model.store.importBytes("Paper playback.wav", "audio/wav", wav.array())
             }
         wav.array().fill(0)
@@ -150,6 +151,20 @@ class UiRoundTripTest {
             .onNodeWithContentDescription("Play", substring = false)
             .performScrollTo()
             .performClick()
+        rule.waitUntil(15000) { model.playing }
+        rule.onNodeWithTag("media-error").assertDoesNotExist()
+        rule
+            .onNodeWithContentDescription("Next track", substring = false)
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        rule.waitUntil(15000) {
+            rule
+                .onAllNodesWithText("Second playback", substring = false)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        rule.onNodeWithContentDescription("Previous track", substring = false).assertIsEnabled()
         rule.waitUntil(15000) { model.playing }
         // Pause alone must revoke the session, before the activity stops.
         rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
