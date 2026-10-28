@@ -153,7 +153,7 @@ fun PaperLibrary(
                 }
             else emptyList()
         }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
         // Keep the text field at the same call site when the IME changes available height.
         val short =
             androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
