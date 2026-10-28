@@ -160,7 +160,7 @@ jobs:
           python3 - <<'PYREPORT'
           import pathlib, base64, xml.etree.ElementTree as ET
           root = pathlib.Path('app/build/reports/visual-walkthrough')
-          for capture in sorted(root.glob('review-*.png')):
+          for capture in sorted(root.glob('review-*.jpg')):
               print('AUDIT_CAPTURE_' + capture.stem + '=' + base64.b64encode(capture.read_bytes()).decode())
           for failure_list in root.glob('*-failures.txt'):
               print('WALKTHROUGH_ERRORS ' + failure_list.name + ' ' + failure_list.read_text())

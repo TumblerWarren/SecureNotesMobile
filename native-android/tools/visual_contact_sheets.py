@@ -18,6 +18,7 @@ for config in ('portrait', 'large', 'landscape'):
             sheet.paste(shot, (x + (cell_width - shot.width) // 2, y + 26))
             draw.text((x + 4, y + 5), path.stem, fill='black')
         sheet.save(root / f'review-{config}-{offset // 4 + 1:02}.png')
+        sheet.save(root / f'review-{config}-{offset // 4 + 1:02}.jpg', quality=85)
 
 # An offline review entry point inside the downloaded verification artifact.
 import html

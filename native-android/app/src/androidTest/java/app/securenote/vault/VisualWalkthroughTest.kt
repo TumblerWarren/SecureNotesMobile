@@ -64,6 +64,21 @@ class VisualWalkthroughTest {
             else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         Thread.sleep(1200)
         instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            // Match MainActivity's layout-affecting window settings; only screenshot blocking
+            // differs because this Activity displays synthetic fixtures exclusively.
+            rule.activity.window.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            )
+            androidx.core.view.WindowCompat.getInsetsController(
+                    rule.activity.window,
+                    rule.activity.window.decorView,
+                )
+                .apply {
+                    isAppearanceLightStatusBars = true
+                    isAppearanceLightNavigationBars = true
+                }
+        }
         val directory = "test-walkthrough-${UUID.randomUUID()}"
         store = VaultStore(context, directory)
         val ids = runBlocking { fixtures() }
@@ -173,7 +188,7 @@ class VisualWalkthroughTest {
                 home()
                 rule.onNodeWithTag("nav-folders").performClick()
                 waitText("Travel documents")
-                rule.onAllNodesWithContentDescription("Folder options").onFirst().performClick()
+                rule.onAllNodesWithContentDescription("Folder options").onLast().performClick()
                 save("folder-menu")
                 rule.onNodeWithText("Color", substring = false).performClick()
                 save("folder-colors")
@@ -296,11 +311,25 @@ class VisualWalkthroughTest {
                 open(ids.getValue("audio"))
                 Thread.sleep(1200)
                 save("audio-player")
+                rule.runOnIdle {
+                    rule.activity
+                        .findViewById<View>(androidx.media3.ui.R.id.exo_play_pause)
+                        .performClick()
+                }
+                Thread.sleep(1000)
+                save("audio-playing")
             }
             step("video") {
                 open(ids.getValue("video"))
                 Thread.sleep(1200)
                 save("video-player")
+                rule.runOnIdle {
+                    rule.activity
+                        .findViewById<View>(androidx.media3.ui.R.id.exo_play_pause)
+                        .performClick()
+                }
+                Thread.sleep(1000)
+                save("video-playing")
             }
             step("unsupported") {
                 open(ids.getValue("document"))
