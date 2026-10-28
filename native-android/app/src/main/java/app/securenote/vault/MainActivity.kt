@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 internal fun VaultApp(model: VaultModel) {
     val navigationLabels = LocalDensity.current.fontScale <= 1.3f
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val imeVisible = paperKeyboardVisible()
     var selectingFiles by remember { mutableStateOf(false) }
     val open by model.unlocked.collectAsState()
     val busy by model.busy.collectAsState()
@@ -254,7 +254,7 @@ internal fun VaultApp(model: VaultModel) {
                     Modifier.weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
+                        .padding(horizontal = 16.dp, vertical = if (imeVisible) 4.dp else 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     LockScreen(model, busy)
@@ -461,7 +461,7 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     val creating = !model.store.exists
-    val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val keyboardOpen = paperKeyboardVisible()
     if (!keyboardOpen) {
         Text(
             if (recoveryMode) "A way back in."
@@ -594,9 +594,8 @@ private fun ItemScreen(model: VaultModel, id: String) {
             failed = true
         }
     }
-    val density = LocalDensity.current
     val compactKeyboard =
-        WindowInsets.ime.getBottom(density) > 0 &&
+        paperKeyboardVisible() &&
             androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
     Column(Modifier.fillMaxSize()) {

@@ -342,21 +342,22 @@ internal fun DrawingBlock(
                 val paths = remember(strokes, dimensions) { pathCache.resolve(strokes, dimensions) }
                 var options by remember { mutableStateOf(false) }
                 @Composable
-                fun strokeProperties() {
+                fun strokeProperties(showHeading: Boolean = true) {
                     Column(Modifier.padding(12.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                if (erasing) "Eraser" else tool,
-                                Modifier.weight(1f),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            PaperAction("Hide properties", PaperGlyph.Close) {
-                                properties = false
+                        if (showHeading)
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    if (erasing) "Eraser" else tool,
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                PaperAction("Hide properties", PaperGlyph.Close) {
+                                    properties = false
+                                }
                             }
-                        }
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -449,7 +450,12 @@ internal fun DrawingBlock(
                     }
                 }
                 if (properties && landscape)
-                    PaperSheet("Stroke properties", { properties = false }) { strokeProperties() }
+                    PaperSheet(
+                        if (erasing) "Eraser" else "$tool properties",
+                        { properties = false },
+                    ) {
+                        strokeProperties(showHeading = false)
+                    }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Drawing",

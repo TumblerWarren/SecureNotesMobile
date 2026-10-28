@@ -183,6 +183,17 @@ class VisualWalkthroughTest {
                 save("password-form")
                 rule.onNodeWithText("Current password", substring = false).performClick()
                 save("password-keyboard")
+                listOf("New password", "Confirm password").forEach { label ->
+                    rule
+                        .onNodeWithText(label, substring = false)
+                        .performScrollTo()
+                        .performClick()
+                        .assertIsFocused()
+                    save(
+                        if (label == "New password") "new-password-keyboard"
+                        else "confirm-password-keyboard"
+                    )
+                }
             }
             step("folders") {
                 home()
@@ -243,6 +254,12 @@ class VisualWalkthroughTest {
                     .performScrollTo()
                     .performClick()
                 waitDescription("Cell 1, 3")
+                // In landscape the Add column button is below the first row; scroll back
+                // vertically before checking that row. Portrait still checks auto-reveal.
+                if (landscape)
+                    rule
+                        .onNodeWithContentDescription("Cell 1, 3", substring = false)
+                        .performScrollTo()
                 rule
                     .onNodeWithContentDescription("Cell 1, 3", substring = false)
                     .assertIsDisplayed()
@@ -424,16 +441,35 @@ class VisualWalkthroughTest {
                 rule.runOnIdle { model.lock() }
                 save("lock-screen")
                 rule
+                    .onNodeWithTag("vault-password")
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsFocused()
+                save("vault-password-keyboard")
+                hideKeyboard()
+                rule
                     .onNodeWithText("Use recovery key", substring = false)
                     .performScrollTo()
                     .performClick()
                 save("recovery-form")
+                rule
+                    .onNodeWithText("Recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsFocused()
+                save("recovery-key-field-keyboard")
                 rule
                     .onNodeWithText("New password", substring = false)
                     .performScrollTo()
                     .performClick()
                     .assertIsFocused()
                 save("recovery-keyboard")
+                rule
+                    .onNodeWithText("Confirm password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsFocused()
+                save("recovery-confirm-keyboard")
             }
         } finally {
             shell("pkill -2 screenrecord")
@@ -561,6 +597,20 @@ class VisualWalkthroughTest {
             WindowInspector.getGlobalWindowViews().forEach(::syntheticWindows)
         }
         Thread.sleep(650)
+        if (name.contains("keyboard") && (name.contains("password") || name.contains("recovery"))) {
+            val focused = rule.onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull()
+            checkNotNull(focused) { "No focused input in $name" }
+            val frame = android.graphics.Rect()
+            instrumentation.runOnMainSync {
+                val roots = WindowInspector.getGlobalWindowViews()
+                val active = roots.lastOrNull { it.hasWindowFocus() } ?: roots.last { it.isShown }
+                active.getWindowVisibleDisplayFrame(frame)
+            }
+            assertTrue(
+                "Focused input in $name extends to ${focused.boundsInWindow.bottom}, keyboard starts at ${frame.bottom}",
+                focused.boundsInWindow.bottom <= frame.bottom + 2,
+            )
+        }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         val file = "$prefix-${(++ordinal).toString().padStart(2, '0')}-$name"
         val bytes =

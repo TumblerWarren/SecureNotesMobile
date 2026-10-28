@@ -141,8 +141,8 @@ internal fun PaperSlider(
 internal fun Modifier.keepInputVisible(): Modifier {
     val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     var focused by remember { mutableStateOf(false) }
-    val ime = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
-    LaunchedEffect(focused, ime) {
+    val keyboard = paperKeyboardVisible()
+    LaunchedEffect(focused, keyboard) {
         if (focused) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
                 kotlinx.coroutines.delay(180)
@@ -168,4 +168,27 @@ internal fun PaperDialogBars() {
         }
         onDispose {}
     }
+}
+
+/** Read unconsumed platform IME visibility; nested inset padding may consume Compose IME insets. */
+@Composable
+internal fun paperKeyboardVisible(): Boolean {
+    val view = LocalView.current
+    var visible by remember(view) { mutableStateOf(false) }
+    DisposableEffect(view) {
+        fun update() {
+            visible =
+                androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                    ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+        }
+        val observer = android.view.ViewTreeObserver.OnGlobalLayoutListener { update() }
+        view.viewTreeObserver.addOnGlobalLayoutListener(observer)
+        update()
+        onDispose {
+            if (view.viewTreeObserver.isAlive)
+                view.viewTreeObserver.removeOnGlobalLayoutListener(observer)
+        }
+    }
+    return visible ||
+        WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
 }

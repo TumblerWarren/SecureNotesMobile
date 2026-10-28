@@ -51,8 +51,7 @@ fun SettingsDialog(
             ),
     ) {
         PaperDialogBars()
-        val keyboardOpen =
-            WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+        val keyboardOpen = paperKeyboardVisible()
         val compactKeyboard =
             keyboardOpen &&
                 androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
@@ -85,7 +84,10 @@ fun SettingsDialog(
                     Modifier.weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(if (changing) 16.dp else 8.dp)
+                        .padding(
+                            horizontal = if (changing) 16.dp else 8.dp,
+                            vertical = if (compactKeyboard) 4.dp else if (changing) 16.dp else 8.dp,
+                        )
                 ) {
                     if (changing) {
                         if (!keyboardOpen)
