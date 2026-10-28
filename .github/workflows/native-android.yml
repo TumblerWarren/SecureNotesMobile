@@ -219,6 +219,8 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
       - name: Require private release signing credentials
         env:
           SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
@@ -247,7 +249,7 @@ jobs:
           ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew --no-configuration-cache :app:assembleRelease
       - name: Verify signed APK and prepare release asset
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs native-android/app/build/outputs/apk/release/app-release.apk

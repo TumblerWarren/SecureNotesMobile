@@ -156,6 +156,49 @@ class VisualWalkthroughTest {
                 waitText("Move to folder")
                 save("move-picker")
             }
+            step("unfiled-move") {
+                home()
+                rule.onNodeWithTag("nav-folders").performClick()
+                rule.onNodeWithText("Organize", substring = false).performClick()
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))
+                rule.onNodeWithTag("select-${ids.getValue("audio")}").performClick()
+                rule.onNodeWithText("Move", substring = false).performClick()
+                rule.onNodeWithText("Work", substring = false).performClick()
+                rule.onNodeWithText("Move here", substring = false).performClick()
+                rule.waitUntil(15000) {
+                    runBlocking { ids.getValue("audio") in store.dao.members("work") }
+                }
+                save("unfiled-organized")
+            }
+            step("bulk-delete-long-press") {
+                home()
+                val disposable = runBlocking {
+                    listOf(store.newNote(), store.newNote()).also { notes ->
+                        notes.forEachIndexed { index, note ->
+                            store.dao.rename(note, "Disposable selection $index")
+                        }
+                    }
+                }
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("entry-${disposable[0]}"))
+                rule.onNodeWithTag("entry-${disposable[0]}").performTouchInput { longClick() }
+                waitText("1 selected")
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${disposable[1]}"))
+                rule.onNodeWithTag("select-${disposable[1]}").performClick()
+                waitText("2 selected")
+                rule.onNodeWithText("Delete", substring = false).performClick()
+                waitText("Delete permanently?")
+                save("bulk-delete-confirmation")
+                rule.onNodeWithText("Delete", substring = false).performClick()
+                rule.waitUntil(15000) {
+                    runBlocking { disposable.all { store.dao.find(it) == null } }
+                }
+            }
             step("group-by-type") {
                 home()
                 tool("Select", "Select items").performClick()

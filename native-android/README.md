@@ -29,7 +29,7 @@ python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
 
 The sodium script builds checksummed upstream source for ARM64 and x86-64. Generated source/binaries stay ignored. Native libraries use 16 KiB-compatible linker alignment.
 
-The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application ID `com.anonymous.SecureNotesMobile.nativepreview`; it installs alongside the existing application. Production builds retain the original application ID and require its original signing key. Release builds are unsigned; no deployment is performed by building them.
+The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application ID `com.anonymous.SecureNotesMobile.nativepreview`; it installs alongside the existing application. Production builds retain the original application ID. Master builds publish only APKs signed with the configured release key after tests and signature verification pass; missing signing secrets stop publication. Unsigned compilation outputs are excluded from artifacts. See [release signing](docs/RELEASE-SIGNING.md) for setup and upgrade compatibility.
 
 ## Build versions
 
