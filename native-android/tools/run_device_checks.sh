@@ -13,6 +13,7 @@ mkdir -p app/build/reports/visual-walkthrough
 adb pull /sdcard/Download/SecureNoteSyntheticWalkthrough/. app/build/reports/visual-walkthrough/ || true
 adb pull /sdcard/Movies/SecureNoteSyntheticTests/. app/build/reports/visual-walkthrough/ || true
 adb shell rm -rf /sdcard/Download/SecureNoteSyntheticWalkthrough /sdcard/Movies/SecureNoteSyntheticTests || true
-python3 tools/visual_contact_sheets.py
+git rev-parse HEAD > app/build/reports/visual-walkthrough/source-commit.txt
+python3 tools/visual_contact_sheets.py || test_result=1
 adb logcat -d -s AndroidRuntime:E > app/build/reports/runtime-errors.log || true
 exit "$test_result"

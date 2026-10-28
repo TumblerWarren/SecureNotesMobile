@@ -50,6 +50,7 @@ class VisualWalkthroughTest {
     private val manifest = StringBuilder()
     private var ordinal = 0
     private var recording: ParcelFileDescriptor? = null
+    private var recordStarted = 0L
 
     @Test fun portraitWalkthrough() = tour("portrait", 1f, false)
 
@@ -59,11 +60,11 @@ class VisualWalkthroughTest {
 
     private fun tour(name: String, font: Float, landscape: Boolean) {
         prefix = name
-        if (landscape) {
-            rule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            Thread.sleep(1200)
-            instrumentation.waitForIdleSync()
-        }
+        rule.activity.requestedOrientation =
+            if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        Thread.sleep(1200)
+        instrumentation.waitForIdleSync()
         val directory = "test-walkthrough-${UUID.randomUUID()}"
         store = VaultStore(context, directory)
         val ids = runBlocking { fixtures() }
@@ -93,6 +94,7 @@ class VisualWalkthroughTest {
             }
             waitTag("vault-library")
             shell("mkdir -p /sdcard/Movies/SecureNoteSyntheticTests")
+            recordStarted = android.os.SystemClock.elapsedRealtime()
             recording =
                 instrumentation.uiAutomation.executeShellCommand(
                     "screenrecord --time-limit 175 --bit-rate 1500000 /sdcard/Movies/SecureNoteSyntheticTests/$prefix-tour.mp4"
@@ -118,16 +120,26 @@ class VisualWalkthroughTest {
             step("selection") {
                 home()
                 tool("Select", "Select items").performClick()
-                rule.onAllNodes(isToggleable()).onFirst().performScrollTo().performClick()
+                rule.onNodeWithTag("vault-library").performScrollToIndex(2)
+                rule.waitUntil(15000) {
+                    rule.onAllNodes(isToggleable()).fetchSemanticsNodes().isNotEmpty()
+                }
+                rule.onAllNodes(isToggleable()).onFirst().performClick()
+                rule.onNodeWithTag("vault-library").performScrollToIndex(0)
                 save("selection")
-                rule.onNodeWithText("Move", substring = false).performClick()
+                rule.onNodeWithText("Move", substring = false).performScrollTo().performClick()
                 save("move-picker")
             }
             step("group-by-type") {
                 home()
                 tool("Select", "Select items").performClick()
-                rule.onAllNodes(isToggleable()).onFirst().performScrollTo().performClick()
-                rule.onNodeWithText("By type", substring = false).performClick()
+                rule.onNodeWithTag("vault-library").performScrollToIndex(2)
+                rule.waitUntil(15000) {
+                    rule.onAllNodes(isToggleable()).fetchSemanticsNodes().isNotEmpty()
+                }
+                rule.onAllNodes(isToggleable()).onFirst().performClick()
+                rule.onNodeWithTag("vault-library").performScrollToIndex(0)
+                rule.onNodeWithText("By type", substring = false).performScrollTo().performClick()
                 save("group-confirmation")
             }
             step("add-dialog") {
@@ -190,7 +202,7 @@ class VisualWalkthroughTest {
                 open(ids.getValue("note"))
                 waitTag("native-note-body")
                 save("note-reading")
-                rule.onAllNodesWithTag("native-note-body").onFirst().performClick()
+                rule.onAllNodesWithTag("native-note-body").onFirst().performTouchInput { click() }
                 save("note-keyboard")
                 hideKeyboard()
                 rule.runOnIdle {
@@ -256,8 +268,20 @@ class VisualWalkthroughTest {
             }
             step("pdf-zoom") {
                 open(ids.getValue("pdf"))
-                waitDescription("Page 1")
-                rule.onNodeWithContentDescription("Page 1", substring = false).performClick()
+                rule.waitUntil(15000) {
+                    rule
+                        .onAllNodes(
+                            hasContentDescription("Page ", substring = true) and hasClickAction()
+                        )
+                        .fetchSemanticsNodes()
+                        .isNotEmpty()
+                }
+                rule
+                    .onAllNodes(
+                        hasContentDescription("Page ", substring = true) and hasClickAction()
+                    )
+                    .onFirst()
+                    .performClick()
                 waitText("Fit width")
                 save("pdf-zoom")
                 rule.onNodeWithText("Zoom in", substring = false).performClick()
@@ -304,10 +328,37 @@ class VisualWalkthroughTest {
                 rule.onNodeWithText("Delete", substring = false).performClick()
                 save("delete-confirmation")
             }
+            step("legacy-password") {
+                home()
+                rule.runOnIdle {
+                    model.legacySource.value =
+                        android.net.Uri.parse("content://app.securenote.syntheticfolders/unused")
+                }
+                waitText("Import old notes")
+                save("legacy-password")
+                rule.runOnIdle { model.legacySource.value = null }
+            }
+            step("recovery-key-display") {
+                home()
+                rule.runOnIdle { model.recovery.value = ByteArray(32) }
+                waitText("Record your recovery key")
+                save("recovery-key-display")
+                rule.runOnIdle { model.recovery.value = null }
+            }
             step("lock-screen") {
                 home()
                 rule.runOnIdle { model.lock() }
                 save("lock-screen")
+                rule
+                    .onNodeWithText("Use recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("recovery-form")
+                rule
+                    .onNodeWithText("New password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("recovery-keyboard")
             }
         } finally {
             shell("pkill -2 screenrecord")
@@ -337,6 +388,8 @@ class VisualWalkthroughTest {
         hideKeyboard()
         rule.runOnIdle {
             model.message.value = ""
+            model.legacySource.value = null
+            model.recovery.value = null
             model.query.value = ""
             model.folderBrowsing.value = false
             model.folderId.value = null
@@ -442,7 +495,9 @@ class VisualWalkthroughTest {
             "text/plain",
             rule.onAllNodes(isRoot()).printToString().toByteArray(),
         )
-        manifest.append("$file\t${bitmap.width}x${bitmap.height}\n")
+        manifest.append(
+            "$file\t${bitmap.width}x${bitmap.height}\t${(android.os.SystemClock.elapsedRealtime() - recordStarted) / 1000.0}\n"
+        )
         bitmap.recycle()
         println("WALKTHROUGH_CAPTURE=$file")
     }
@@ -482,7 +537,7 @@ class VisualWalkthroughTest {
             store.dao.rename(id, title)
             store.ensureBlocks(id)
             val first = store.dao.blocks(id).single()
-            store.dao.editBlock(
+            store.dao.saveBlock(
                 first.copy(
                     kind = kind,
                     content = content,
