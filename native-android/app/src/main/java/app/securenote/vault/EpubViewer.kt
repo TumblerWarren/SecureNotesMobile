@@ -198,7 +198,6 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     var failure by remember(id) { mutableStateOf("") }
     var contents by remember(id) { mutableStateOf(false) }
     var viewportHeight by remember { mutableIntStateOf(0) }
-    var activeContent by remember(id) { mutableStateOf<String?>(null) }
     var initialPosition by remember(id) { mutableStateOf<EpubPosition?>(null) }
     // Reading position belongs only in the encrypted index, never saved-instance state.
     val scroll =
@@ -248,7 +247,6 @@ internal fun EpubViewer(model: VaultModel, id: String) {
         } else if (
             (direction > 0 && frame?.next == true) || (direction < 0 && frame?.previous == true)
         ) {
-            activeContent = null
             navigate { client.move(direction) }
         }
     }
@@ -411,7 +409,10 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 frame?.let { current ->
                     Text(
-                        "Chapter ${current.chapter+1} / ${catalog?.chapters?.size ?: 0}",
+                        if (current.contentIndex >= 0)
+                            "Chapter ${current.contentIndex + 1} / ${catalog?.contents?.size ?: 0}"
+                        else
+                            "Reading part ${current.chapter + 1} / ${catalog?.chapters?.size ?: 0}",
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                     )
@@ -439,8 +440,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             val chapters = catalog?.contents.orEmpty()
             val list =
                 rememberLazyListState(
-                    initialFirstVisibleItemIndex =
-                        chapters.indexOfFirst { it.chapter == frame?.chapter }.coerceAtLeast(0)
+                    initialFirstVisibleItemIndex = (frame?.contentIndex ?: -1).coerceAtLeast(0)
                 )
             val available =
                 androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .55f
@@ -448,9 +448,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
             fun chapterRow(index: Int) {
                 val entry = chapters[index]
                 val label = entry.title
-                val active =
-                    if (activeContent != null) entry.link == activeContent
-                    else index == chapters.indexOfFirst { it.chapter == frame?.chapter }
+                val active = index == frame?.contentIndex
                 Surface(
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
                     color = if (active) Paper.AccentSoft else Paper.Background,
@@ -460,7 +458,6 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                             .heightIn(min = 56.dp)
                             .clickable {
                                 contents = false
-                                activeContent = entry.link
                                 navigate { client.follow(entry.link) }
                             }
                             .padding(

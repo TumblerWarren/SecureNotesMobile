@@ -16,6 +16,7 @@ internal data class EpubFrame(
     val sections: Int,
     val previous: Boolean,
     val next: Boolean,
+    val contentIndex: Int = -1,
 ) : AutoCloseable {
     @Synchronized
     override fun close() {
@@ -159,6 +160,11 @@ internal class EpubClient(private val context: Context) : AutoCloseable {
                         require(chapter in checkNotNull(catalog).chapters.indices)
                         val section = data.getInt("section")
                         require(section in 0 until count)
+                        val contentIndex = data.getInt("contentIndex", -1)
+                        require(
+                            contentIndex == -1 ||
+                                contentIndex in checkNotNull(catalog).contents.indices
+                        )
                         val frame =
                             EpubFrame(
                                 html,
@@ -168,6 +174,7 @@ internal class EpubClient(private val context: Context) : AutoCloseable {
                                 count,
                                 data.getBoolean("previous"),
                                 data.getBoolean("next"),
+                                contentIndex,
                             )
                         if (pending?.complete(frame) != true) frame.close()
                     } catch (e: Exception) {

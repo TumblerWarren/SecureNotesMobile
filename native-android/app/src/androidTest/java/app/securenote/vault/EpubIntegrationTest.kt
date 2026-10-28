@@ -117,11 +117,13 @@ class EpubIntegrationTest {
                 first.close()
                 val dawn = client.follow(checkNotNull(client.catalog).contents[1].link)
                 assertEquals(0, dawn.chapter)
+                assertEquals(1, dawn.contentIndex)
                 assertTrue(dawn.html.contains("Nested subchapter body"))
                 assertFalse(dawn.html.contains("First chapter body"))
                 dawn.close()
                 val second = client.follow(link)
                 assertEquals(1, second.chapter)
+                assertEquals(2, second.contentIndex)
                 assertTrue(second.html.contains("Second chapter body"))
                 store.dao.saveReadingState(
                     id,
@@ -146,6 +148,7 @@ class EpubIntegrationTest {
                 assertEquals(123, position.scroll)
                 val resumed = client.open(store, id, position)
                 assertEquals(1, resumed.chapter)
+                assertEquals(2, resumed.contentIndex)
                 assertTrue(resumed.html.contains("Second chapter body"))
                 resumed.close()
             }

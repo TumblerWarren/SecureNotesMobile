@@ -32,6 +32,7 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
         val sections: Int,
         val previous: Boolean,
         val next: Boolean,
+        val contentIndex: Int,
     ) : Closeable {
         override fun close() {
             images.values.forEach { it.recycle() }
@@ -531,6 +532,12 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
                 section > 0 || chapters.indices.any { it < chapter && chapters[it].linear },
                 section < parsed.pages.lastIndex ||
                     chapters.indices.any { it > chapter && chapters[it].linear },
+                contents.indices
+                    .filter { contents[it].chapter == chapter }
+                    .filter { (parsed.anchors[contents[it].anchor] ?: 0) <= section }
+                    .maxWithOrNull(
+                        compareBy<Int> { parsed.anchors[contents[it].anchor] ?: 0 }.thenBy { it }
+                    ) ?: -1,
             )
         } catch (e: Exception) {
             bitmaps.values.forEach { it.recycle() }

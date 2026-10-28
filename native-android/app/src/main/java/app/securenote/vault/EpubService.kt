@@ -96,6 +96,7 @@ class EpubService : Service() {
                                         putInt("chapter", page.chapter)
                                         putInt("section", page.section)
                                         putInt("sections", page.sections)
+                                        putInt("contentIndex", page.contentIndex)
                                         putBoolean("previous", page.previous)
                                         putBoolean("next", page.next)
                                         putStringArrayList("imageKeys", ArrayList(page.images.keys))
