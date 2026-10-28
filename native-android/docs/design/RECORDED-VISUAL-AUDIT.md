@@ -1,6 +1,6 @@
 # Recorded visual audit
 
-The previous green build and eight selected screenshots were insufficient evidence for app-wide visual quality. This review records the current interfaces before proposing another layout revision.
+The previous green build and eight selected screenshots were insufficient evidence for app-wide visual quality. This document records the baseline interfaces and findings before the approved redesign. See the [implementation and subsequent validation](APPROVED-UI-IMPLEMENTATION.md) for the changed interfaces and newer evidence.
 
 ## Completed evidence
 
@@ -14,7 +14,7 @@ The previous green build and eight selected screenshots were insufficient eviden
 | Portrait, actual Android 2× text | 52 | 53.8 s | 0 |
 | Landscape, normal text | 52 | 53.5 s | 0 |
 
-All **156 final captures** were inspected through 39 labelled contact sheets. All three capture tests passed, recording durations were checked against the capture indices, and the separate functional job passed its 28 emulator tests plus build/release/lint checks. These successes establish evidence collection and functional checks; they do not close the visual defects below. This revision adds recording/review infrastructure and the redesign plan; production UI layouts are unchanged.
+All **156 final captures** were inspected through 39 labelled contact sheets. All three capture tests passed, recording durations were checked against the capture indices, and the separate functional job passed its 28 emulator tests plus build/release/lint checks. These successes establish evidence collection and functional checks; they do not close the visual defects below. That baseline revision added recording/review infrastructure and the redesign plan; its production UI layouts were unchanged.
 
 The videos show actual synthetic interactions, including drawing and media play/pause. The protected video picture stays black by design. Recovery-key display uses a synthetic all-zero placeholder, not a generated or real recovery key. Image names describe intended checkpoints; for example the normal-portrait search checkpoint caught the keyboard hidden, while the large-text and landscape search captures show it open. Keyboard-open views are also captured in notes and password/recovery forms.
 

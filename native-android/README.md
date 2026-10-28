@@ -7,7 +7,8 @@ Native Kotlin/Compose rewrite of SecureNotesMobile. All vault data stays local. 
 - Password-only sessions, independent offline recovery key, password rotation, immediate lock on pause/screen lock and five-minute foreground inactivity lock. Playback stops on lock.
 - Native libsodium Argon2id (64 MiB, three passes), random 256-bit master/recovery keys, authenticated key wrappers, SQLCipher metadata and encrypted full-text search.
 - Tink authenticated streaming files with independent keys, bounded import buffers, atomic commits, orphan cleanup and revocable 64-bit random-access readers.
-- Paged collections; encrypted thumbnails; native tiled image zoom; paged UTF-8 text; isolated native PDF rendering; Media3 audio/video playback for supported Android codecs.
+- Paged collections; encrypted thumbnails; native tiled image fit/zoom/rotate; paged UTF-8 text; isolated native PDF rendering; internal Media3 audio/video controls and same-folder encrypted playback queues for supported Android codecs.
+- Encrypted folder hierarchies, a unified folder/file list, breadcrumbs, folder import, colors, moving, renaming, and arranging selected files by type.
 - Internal EPUB 2/3 reading for DRM-free reflowable books, with chapter contents, section navigation, inline raster images, internal links, font-size controls and encrypted reading position. See [EPUB support and limits](docs/EPUB.md).
 - Native rich-text blocks, lists, links, tables, colored drawings, attachments, search and pinning. Drafts survive block recycling; formatting preserves the native selection; debounced saves serialize only changed text blocks. See [notes optimization research and implementation](docs/NOTES-PERFORMANCE.md), [native notes implementation](docs/NOTES.md) and the [drawing canvas review and upgrade proposal](docs/DRAWING-RESEARCH.md).
 - Read-only legacy importer: decrypts the old database in an isolated process into memory, converts notes and embedded media, retains original HTML inside encrypted storage, and leaves the source untouched.
@@ -17,7 +18,7 @@ Arbitrary files can be stored. Office document previews, password-protected PDFs
 
 ## Build
 
-Build verification has resumed through GitHub Actions on `codex/paper-ui`. Local Gradle startup is blocked by the execution environment’s socket restrictions. The Paper UI, EPUB reader, notes and canvas changes are awaiting CI compilation and runtime results; see the Native Android workflow for current status.
+GitHub Actions builds and verifies `codex/paper-ui`. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records validation results and links the preview APK, recordings and actual screen captures. Local Gradle startup is blocked by the execution environment’s socket restrictions.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 
@@ -46,4 +47,4 @@ See the [other-feature source review](docs/FEATURE-REVIEW.md) for viewer, librar
 
 ## Release gates
 
-The implementation needs executed Android security, viewer and lifecycle tests; generated device profiles; physical 4 GB device measurements with the 10,000-file/100 GB workload and 20 GB videos; and independent security review before a production release. Keep another copy of important data during validation. No claim of independent audit or measured physical-device performance is made.
+Before a production release, the implementation still needs generated device profiles, physical 4 GB device measurements with the 10,000-file/100 GB workload and 20 GB videos, broader codec/device coverage, and independent security review. Executed emulator tests and sampled visual evidence are recorded in the implementation report. Keep another copy of important data during validation. No claim of independent audit or measured physical-device performance is made.
