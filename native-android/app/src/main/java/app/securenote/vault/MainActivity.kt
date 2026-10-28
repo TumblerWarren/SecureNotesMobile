@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 internal fun VaultApp(model: VaultModel) {
+    val navigationLabels = LocalDensity.current.fontScale <= 1.3f
     val open by model.unlocked.collectAsState()
     val busy by model.busy.collectAsState()
     val libraryState = key(open) { rememberLazyGridState() }
@@ -187,7 +189,10 @@ internal fun VaultApp(model: VaultModel) {
             ) {
                 Text(
                     "SecureNote",
-                    style = MaterialTheme.typography.titleLarge,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (open)
@@ -362,11 +367,12 @@ internal fun VaultApp(model: VaultModel) {
                                         glyph,
                                         color = if (active) Paper.Accent else Paper.Muted,
                                     )
-                                    Text(
-                                        label,
-                                        color = if (active) Paper.Accent else Paper.Muted,
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
+                                    if (navigationLabels)
+                                        Text(
+                                            label,
+                                            color = if (active) Paper.Accent else Paper.Muted,
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
                                 }
                             }
                         }

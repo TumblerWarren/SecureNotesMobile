@@ -158,15 +158,16 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                         TextButton({ chosen = emptySet() }) { Text("Clear") }
                     }
 
-                Text(
-                    when (category) {
-                        "notes" -> "Notes"
-                        "documents" -> "Files"
-                        "media" -> "Media"
-                        else -> if (browsing) "Folder contents" else "Vault"
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                )
+                if (!browsing)
+                    Text(
+                        when (category) {
+                            "notes" -> "Notes"
+                            "documents" -> "Files"
+                            "media" -> "Media"
+                            else -> if (browsing) "Folder contents" else "Vault"
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                    )
                 Spacer(Modifier.height(10.dp))
                 Text(
                     if (pages.itemCount == 0) "On this device"
