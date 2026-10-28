@@ -52,6 +52,8 @@ fun SettingsDialog(
     ) {
         PaperDialogBars()
         val keyboardOpen = paperKeyboardVisible()
+        val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
+        val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
         val compactKeyboard =
             keyboardOpen &&
                 androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
@@ -117,7 +119,25 @@ fun SettingsDialog(
                                     },
                                     singleLine = true,
                                     keyboardOptions =
-                                        KeyboardOptions(keyboardType = KeyboardType.Password),
+                                        KeyboardOptions(
+                                            keyboardType = KeyboardType.Password,
+                                            imeAction =
+                                                if (index < 2)
+                                                    androidx.compose.ui.text.input.ImeAction.Next
+                                                else androidx.compose.ui.text.input.ImeAction.Done,
+                                        ),
+                                    keyboardActions =
+                                        androidx.compose.foundation.text.KeyboardActions(
+                                            onNext = {
+                                                inputFocus.moveFocus(
+                                                    androidx.compose.ui.focus.FocusDirection.Next
+                                                )
+                                            },
+                                            onDone = {
+                                                inputFocus.clearFocus()
+                                                inputKeyboard?.hide()
+                                            },
+                                        ),
                                     visualTransformation = PasswordVisualTransformation(),
                                     enabled = !busy,
                                     modifier = Modifier.fillMaxWidth().keepInputVisible(),

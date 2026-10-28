@@ -484,6 +484,12 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
             singleLine = true,
             modifier = Modifier.fillMaxWidth().keepInputVisible(),
             visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions =
+                KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+            keyboardActions =
+                androidx.compose.foundation.text.KeyboardActions(
+                    onNext = { focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Next) }
+                ),
             enabled = !busy,
         )
     OutlinedTextField(
@@ -493,7 +499,19 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
         singleLine = true,
         modifier = Modifier.fillMaxWidth().keepInputVisible().testTag("vault-password"),
         visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        keyboardOptions =
+            KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = if (creating || recoveryMode) ImeAction.Next else ImeAction.Done,
+            ),
+        keyboardActions =
+            androidx.compose.foundation.text.KeyboardActions(
+                onNext = { focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Next) },
+                onDone = {
+                    focus.clearFocus()
+                    keyboard?.hide()
+                },
+            ),
         enabled = !busy,
     )
     if (creating || recoveryMode) {
@@ -504,7 +522,15 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
             singleLine = true,
             modifier = Modifier.fillMaxWidth().keepInputVisible().testTag("vault-confirmation"),
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            keyboardOptions =
+                KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            keyboardActions =
+                androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                    }
+                ),
             enabled = !busy,
         )
         Text(

@@ -184,12 +184,11 @@ class VisualWalkthroughTest {
                 save("password-form")
                 rule.onNodeWithText("Current password", substring = false).performClick()
                 save("password-keyboard")
+                var previousField = "Current password"
                 listOf("New password", "Confirm password").forEach { label ->
-                    rule
-                        .onNodeWithText(label, substring = false)
-                        .performScrollTo()
-                        .performClick()
-                        .assertIsFocused()
+                    rule.onNodeWithText(previousField, substring = false).performImeAction()
+                    rule.onNodeWithText(label, substring = false).assertIsFocused()
+                    previousField = label
                     save(
                         if (label == "New password") "new-password-keyboard"
                         else "confirm-password-keyboard"
@@ -257,10 +256,12 @@ class VisualWalkthroughTest {
                 waitDescription("Cell 1, 3")
                 // In landscape the Add column button is below the first row; scroll back
                 // vertically before checking that row. Portrait still checks auto-reveal.
-                if (landscape)
+                if (landscape) {
+                    rule.onNode(hasScrollToIndexAction()).performScrollToIndex(1)
                     rule
                         .onNodeWithContentDescription("Cell 1, 3", substring = false)
                         .performScrollTo()
+                }
                 rule
                     .onNodeWithContentDescription("Cell 1, 3", substring = false)
                     .assertIsDisplayed()
@@ -306,6 +307,7 @@ class VisualWalkthroughTest {
                     .assertIsSelected()
                 val canvasNode =
                     rule.onNodeWithContentDescription("Note drawing canvas", substring = false)
+                allowSyntheticCaptures()
                 val beforePan =
                     if (landscape) canvasNode.captureToImage().asAndroidBitmap() else null
                 canvasNode.performTouchInput {
@@ -494,17 +496,11 @@ class VisualWalkthroughTest {
                     .performClick()
                     .assertIsFocused()
                 save("recovery-key-field-keyboard")
-                rule
-                    .onNodeWithText("New password", substring = false)
-                    .performScrollTo()
-                    .performClick()
-                    .assertIsFocused()
+                rule.onNodeWithText("Recovery key", substring = false).performImeAction()
+                rule.onNodeWithText("New password", substring = false).assertIsFocused()
                 save("recovery-keyboard")
-                rule
-                    .onNodeWithText("Confirm password", substring = false)
-                    .performScrollTo()
-                    .performClick()
-                    .assertIsFocused()
+                rule.onNodeWithText("New password", substring = false).performImeAction()
+                rule.onNodeWithText("Confirm password", substring = false).assertIsFocused()
                 save("recovery-confirm-keyboard")
             }
         } finally {
@@ -618,10 +614,7 @@ class VisualWalkthroughTest {
         }
     }
 
-    private fun save(name: String) {
-        rule.waitForIdle()
-        // Test-APK only: allow synthetic dialog windows to appear in recordings. Production
-        // MainActivity and its security flags are never opened or altered by this harness.
+    private fun allowSyntheticCaptures() {
         instrumentation.runOnMainSync {
             fun syntheticWindows(view: View) {
                 (view as? DialogWindowProvider)
@@ -632,6 +625,13 @@ class VisualWalkthroughTest {
             }
             WindowInspector.getGlobalWindowViews().forEach(::syntheticWindows)
         }
+    }
+
+    private fun save(name: String) {
+        rule.waitForIdle()
+        // Test-APK only: allow synthetic dialog windows to appear in recordings. Production
+        // MainActivity and its security flags are never opened or altered by this harness.
+        allowSyntheticCaptures()
         Thread.sleep(650)
         if (name.contains("keyboard") && (name.contains("password") || name.contains("recovery"))) {
             val inputs = rule.onAllNodes(isFocused())
