@@ -697,12 +697,12 @@ private fun ItemScreen(model: VaultModel, id: String) {
             HorizontalDivider(color = Paper.Line)
             if (failed) {
                 Text("This item is unavailable.", modifier = Modifier.padding(24.dp))
-                return
+                return@BoxWithConstraints
             }
             val value = item
             if (value == null) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-                return
+                return@BoxWithConstraints
             }
             if (deleting)
                 ConfirmPaperDelete(value.name, { deleting = false }) {

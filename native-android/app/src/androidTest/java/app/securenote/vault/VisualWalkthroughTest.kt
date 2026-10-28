@@ -655,6 +655,8 @@ class VisualWalkthroughTest {
                 inputBottom <= frame.bottom + 2,
             )
         }
+        if (name == "search-keyboard")
+            rule.onNodeWithTag("vault-search").assertIsFocused().assertIsDisplayed()
         if (prefix == "landscape" && name in listOf("search-keyboard", "note-keyboard")) {
             val control =
                 if (name == "search-keyboard") rule.onNodeWithTag("vault-search")

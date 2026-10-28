@@ -87,6 +87,8 @@ fun PaperLibrary(
     onSelecting: (Boolean) -> Unit = {},
     onAdd: () -> Unit,
 ) {
+    val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
+    val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val query by model.query.collectAsState()
     val category by model.category.collectAsState()
     val grid by model.useGrid.collectAsState()
@@ -152,7 +154,10 @@ fun PaperLibrary(
             else emptyList()
         }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val short = maxHeight < 360.dp
+        // Keep the text field at the same call site when the IME changes available height.
+        val short =
+            androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
         @Composable
         fun search(modifier: Modifier) {
             OutlinedTextField(
@@ -162,6 +167,17 @@ fun PaperLibrary(
                     model.touch()
                 },
                 singleLine = true,
+                keyboardOptions =
+                    androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Search
+                    ),
+                keyboardActions =
+                    androidx.compose.foundation.text.KeyboardActions(
+                        onSearch = {
+                            inputFocus.clearFocus()
+                            inputKeyboard?.hide()
+                        }
+                    ),
                 modifier = modifier.testTag("vault-search"),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 placeholder = {
