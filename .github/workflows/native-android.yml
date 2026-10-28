@@ -256,7 +256,7 @@ jobs:
           test ! -e native-android/app/build/outputs/apk/release/app-release-unsigned.apk
           mkdir -p signed-release
           cp native-android/app/build/outputs/apk/release/app-release.apk "signed-release/SecureNote-2.0.1-build.${ANDROID_BUILD_NUMBER}.apk"
-          sha256sum signed-release/*.apk > signed-release/SHA256SUMS.txt
+          (cd signed-release && sha256sum *.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
           name: signed-android-release

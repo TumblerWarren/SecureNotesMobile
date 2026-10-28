@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -103,7 +104,10 @@ internal fun FolderPicker(model: VaultModel, dismiss: () -> Unit, choose: (Strin
         ) {
             items(children, key = { it.id }) { f ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { parent = f.id }.heightIn(min = 64.dp),
+                    Modifier.fillMaxWidth()
+                        .testTag("folder-destination-${f.id}")
+                        .clickable { parent = f.id }
+                        .heightIn(min = 64.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     FolderBadge(f)

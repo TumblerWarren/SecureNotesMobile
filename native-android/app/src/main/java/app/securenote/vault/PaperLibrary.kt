@@ -861,7 +861,9 @@ fun ConfirmPaperDelete(name: String, dismiss: () -> Unit, confirm: () -> Unit) {
             Text("“$name” will be removed from this vault. Deleted items cannot be recovered.")
         },
         confirmButton = {
-            TextButton(confirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(confirm, Modifier.testTag("confirm-delete")) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
         },
         dismissButton = { TextButton(dismiss) { Text("Keep item") } },
     )
