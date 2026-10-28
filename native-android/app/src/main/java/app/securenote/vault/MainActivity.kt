@@ -178,6 +178,7 @@ internal fun VaultApp(model: VaultModel) {
             .background(Paper.Background)
             .safeDrawingPadding()
             .imePadding()
+            .padding(start = 4.dp, end = 4.dp, top = 8.dp)
             .semantics { testTagsAsResourceId = true }
             .secureEditing()
     ) {
@@ -190,6 +191,12 @@ internal fun VaultApp(model: VaultModel) {
                         .heightIn(min = 48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Image(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_brand),
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         "SecureNote",
                         style =
@@ -271,7 +278,11 @@ internal fun VaultApp(model: VaultModel) {
                                         vertical = if (hideChrome) 4.dp else 16.dp,
                                     ),
                                 verticalArrangement =
-                                    Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                                    Arrangement.spacedBy(
+                                        12.dp,
+                                        if (hideChrome) Alignment.Top
+                                        else Alignment.CenterVertically,
+                                    ),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 LockScreen(model, busy, hideChrome)
@@ -487,24 +498,27 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
     var confirmation by remember { mutableStateOf("") }
     val creating = !model.store.exists
     val keyboardOpen = paperKeyboardVisible() || compactInput
-    if (!keyboardOpen) {
-        Text(
-            if (recoveryMode) "A way back in."
-            else if (creating) "A private place for everything." else "Welcome back.",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Text(
-            if (recoveryMode) "Use your recovery key to choose a new password."
-            else if (creating)
-                "Your thoughts, documents and moments. Kept on this device, behind your password."
-            else "Enter your password to open your vault.",
-            color = Paper.Muted,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
+    Text(
+        if (recoveryMode) "A way back in."
+        else if (creating) "A private place for everything." else "Welcome back.",
+        style =
+            if (keyboardOpen) MaterialTheme.typography.titleLarge
+            else MaterialTheme.typography.headlineSmall,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
+    Text(
+        if (recoveryMode) "Use your recovery key to choose a new password."
+        else if (creating)
+            "Your thoughts, documents and moments. Kept on this device, behind your password."
+        else "Enter your password to open your vault.",
+        color = Paper.Muted,
+        style =
+            if (keyboardOpen) MaterialTheme.typography.bodySmall
+            else MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
     if (recoveryMode)
         OutlinedTextField(
             secret,
@@ -611,15 +625,17 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
         ) {
             Text(if (recoveryMode) "Use password" else "Use recovery key")
         }
-    HorizontalDivider(color = Paper.Line, modifier = Modifier.padding(top = 12.dp))
-    Text(
-        if (model.pendingImports.isNotEmpty())
-            "Unlock to import your selected files. Originals remain outside the vault."
-        else
-            "On this device. No cloud backup. Deleting app storage permanently deletes your vault.",
-        style = MaterialTheme.typography.bodySmall,
-        color = Paper.Muted,
-    )
+    if (!keyboardOpen) {
+        HorizontalDivider(color = Paper.Line, modifier = Modifier.padding(top = 12.dp))
+        Text(
+            if (model.pendingImports.isNotEmpty())
+                "Unlock to import your selected files. Originals remain outside the vault."
+            else
+                "On this device. No cloud backup. Deleting app storage permanently deletes your vault.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Paper.Muted,
+        )
+    }
     DisposableEffect(Unit) {
         onDispose {
             password = ""

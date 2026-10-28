@@ -494,6 +494,9 @@ class VisualWalkthroughTest {
                     .performScrollTo()
                     .performClick()
                     .assertIsFocused()
+                rule.onNodeWithText("Welcome back.", substring = false).assertExists()
+                if (!landscape && font == 1f)
+                    rule.onNodeWithText("Welcome back.", substring = false).assertIsDisplayed()
                 save("vault-password-keyboard")
                 hideKeyboard()
                 rule

@@ -214,8 +214,9 @@ fun PaperLibrary(
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth()
-                    .background(Paper.Header)
-                    .border(BorderStroke(1.dp, Paper.Line))
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .background(Paper.Header, RoundedCornerShape(14.dp))
+                    .border(BorderStroke(1.dp, Paper.Line), RoundedCornerShape(14.dp))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
