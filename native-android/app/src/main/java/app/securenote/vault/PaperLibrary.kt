@@ -616,7 +616,7 @@ private fun VaultEntry(
                         overflow = TextOverflow.Ellipsis,
                         color = Paper.Muted,
                     )
-                    options()
+                    if (!selecting) options()
                 }
             }
         }
@@ -655,8 +655,9 @@ private fun VaultEntry(
                         )
                 }
             }
-            if (item.pinned) PaperIcon(PaperGlyph.Pin, "Pinned", Modifier.size(14.dp), Paper.Accent)
-            options()
+            if (!selecting && item.pinned)
+                PaperIcon(PaperGlyph.Pin, "Pinned", Modifier.size(14.dp), Paper.Accent)
+            if (!selecting) options()
         }
 }
 

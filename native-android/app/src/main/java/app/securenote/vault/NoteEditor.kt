@@ -529,7 +529,9 @@ private fun TableBlock(
     val scope = rememberCoroutineScope()
     var focused by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cellWidth = (maxWidth / table.columns.coerceAtMost(3)).coerceAtLeast(104.dp)
+        val minCellWidth =
+            104.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.75f)
+        val cellWidth = (maxWidth / table.columns.coerceAtMost(3)).coerceAtLeast(minCellWidth)
         Column {
             Column(Modifier.fillMaxWidth().horizontalScroll(horizontal)) {
                 table.rows.forEachIndexed { rowIndex, row ->
@@ -588,7 +590,7 @@ private fun TableBlock(
                         horizontal.animateScrollTo(horizontal.maxValue)
                     }
                 }
-                if (table.columns > 2)
+                if (cellWidth * table.columns > maxWidth)
                     Text(
                         "Swipe for columns",
                         style = MaterialTheme.typography.labelSmall,

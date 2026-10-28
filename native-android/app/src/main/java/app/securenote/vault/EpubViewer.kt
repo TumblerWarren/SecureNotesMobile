@@ -18,6 +18,8 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -386,49 +388,60 @@ internal fun EpubViewer(model: VaultModel, id: String) {
     }
     if (contents)
         PaperSheet("Chapters", { contents = false }) {
-            catalog?.chapters.orEmpty().forEachIndexed { index, label ->
-                val active = index == frame?.chapter
-                Surface(
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                    color = if (active) Paper.AccentSoft else Paper.Background,
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .clickable {
-                                contents = false
-                                navigate { client.go(index) }
-                            }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+            val chapters = catalog?.chapters.orEmpty()
+            val list =
+                rememberLazyListState(
+                    initialFirstVisibleItemIndex =
+                        (frame?.chapter ?: 0).coerceIn(0, (chapters.size - 1).coerceAtLeast(0))
+                )
+            val available =
+                androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .55f
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = available), state = list) {
+                items(chapters.size) { index ->
+                    val label = chapters[index]
+                    val active = index == frame?.chapter
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        color = if (active) Paper.AccentSoft else Paper.Background,
                     ) {
-                        if (active)
-                            PaperIcon(
-                                PaperGlyph.Play,
-                                modifier = Modifier.size(16.dp),
-                                color = Paper.Accent,
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                                .clickable {
+                                    contents = false
+                                    navigate { client.go(index) }
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (active)
+                                PaperIcon(
+                                    PaperGlyph.Play,
+                                    modifier = Modifier.size(16.dp),
+                                    color = Paper.Accent,
+                                )
+                            Text(
+                                "${index + 1}",
+                                Modifier.padding(horizontal = 12.dp),
+                                style = MaterialTheme.typography.bodyMedium,
                             )
-                        Text(
-                            "${index + 1}",
-                            Modifier.padding(horizontal = 12.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            label,
-                            Modifier.weight(1f),
-                            maxLines = 2,
-                            style = MaterialTheme.typography.bodyMedium,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                        if (active)
-                            PaperIcon(
-                                PaperGlyph.Check,
-                                modifier = Modifier.size(16.dp),
-                                color = Paper.Accent,
+                            Text(
+                                label,
+                                Modifier.weight(1f),
+                                maxLines = 2,
+                                style = MaterialTheme.typography.bodyMedium,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
+                            if (active)
+                                PaperIcon(
+                                    PaperGlyph.Check,
+                                    modifier = Modifier.size(16.dp),
+                                    color = Paper.Accent,
+                                )
+                        }
                     }
+                    Spacer(Modifier.height(4.dp))
                 }
-                Spacer(Modifier.height(4.dp))
             }
         }
 }
