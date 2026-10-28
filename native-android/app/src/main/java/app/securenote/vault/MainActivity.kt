@@ -356,6 +356,7 @@ internal fun VaultApp(model: VaultModel) {
                                 modifier =
                                     Modifier.weight(1f).testTag("nav-$key").semantics {
                                         this.selected = active
+                                        contentDescription = label
                                     },
                                 contentPadding = PaddingValues(vertical = 8.dp, horizontal = 0.dp),
                             ) {
