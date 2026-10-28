@@ -3,7 +3,6 @@ package app.securenote.vault
 import android.app.Application
 import android.content.ContentValues
 import android.content.pm.ActivityInfo
-import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -16,11 +15,8 @@ import android.view.WindowManager
 import android.view.inspector.WindowInspector
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.ByteArrayOutputStream
@@ -60,6 +56,9 @@ class VisualWalkthroughTest {
 
     private fun tour(name: String, font: Float, landscape: Boolean) {
         prefix = name
+        shell("settings put system font_scale $font")
+        Thread.sleep(1200)
+        instrumentation.waitForIdleSync()
         rule.activity.requestedOrientation =
             if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -74,24 +73,11 @@ class VisualWalkthroughTest {
             model.showLibrary("all")
             model.useGrid.value = false
         }
-        val configured =
-            rule.activity.createConfigurationContext(
-                Configuration(rule.activity.resources.configuration).apply { fontScale = font }
-            )
-        val density = rule.activity.resources.displayMetrics.density
+        check(kotlin.math.abs(rule.activity.resources.configuration.fontScale - font) < 0.05f) {
+            "System font scale was not applied: ${rule.activity.resources.configuration.fontScale}, expected $font"
+        }
         try {
-            rule.setContent {
-                CompositionLocalProvider(
-                    LocalContext provides configured,
-                    androidx.activity.compose.LocalActivityResultRegistryOwner provides
-                        rule.activity,
-                    androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides
-                        rule.activity,
-                    LocalDensity provides Density(density, font),
-                ) {
-                    PaperTheme { key(generation) { VaultApp(model) } }
-                }
-            }
+            rule.setContent { PaperTheme { key(generation) { VaultApp(model) } } }
             waitTag("vault-library")
             shell("mkdir -p /sdcard/Movies/SecureNoteSyntheticTests")
             recordStarted = android.os.SystemClock.elapsedRealtime()
@@ -371,6 +357,7 @@ class VisualWalkthroughTest {
                 failures.joinToString("\n").toByteArray(),
             )
             rule.activityRule.scenario.close()
+            shell("settings put system font_scale 1.0")
             runBlocking { model.flushWrites() }
             store.close()
             instrumentation.runOnMainSync {
