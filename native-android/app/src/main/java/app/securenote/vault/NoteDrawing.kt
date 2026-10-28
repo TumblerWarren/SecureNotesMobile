@@ -331,6 +331,7 @@ internal fun DrawingBlock(
                 var tool by remember { mutableStateOf("Pen") }
                 var erasing by remember(block.id) { mutableStateOf(false) }
                 var dimensions by remember { mutableStateOf(IntSize.Zero) }
+                var viewport by remember { mutableStateOf(IntSize.Zero) }
                 val saveCallback by rememberUpdatedState(onEdit)
                 val density = androidx.compose.ui.platform.LocalDensity.current.density
                 fun save() {
@@ -476,6 +477,7 @@ internal fun DrawingBlock(
                 BoxWithConstraints(
                     Modifier.weight(1f)
                         .fillMaxWidth()
+                        .onSizeChanged { viewport = it }
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
                         .background(Color.White)
                         .clipToBounds(),
@@ -497,8 +499,13 @@ internal fun DrawingBlock(
                                 if (navigating)
                                     detectTransformGestures { _, delta, scale, _ ->
                                         val next = (zoom * scale).coerceIn(1f, 8f)
-                                        val limitX = dimensions.width * (next - 1) / 2
-                                        val limitY = dimensions.height * (next - 1) / 2
+                                        // The page can exceed the viewport even at 1x in landscape.
+                                        val limitX =
+                                            ((dimensions.width * next - viewport.width) / 2)
+                                                .coerceAtLeast(0f)
+                                        val limitY =
+                                            ((dimensions.height * next - viewport.height) / 2)
+                                                .coerceAtLeast(0f)
                                         pan =
                                             Offset(
                                                 (pan.x + delta.x).coerceIn(-limitX, limitX),

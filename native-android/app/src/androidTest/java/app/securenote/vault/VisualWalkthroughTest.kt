@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.inspector.WindowInspector
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.window.DialogWindowProvider
@@ -293,6 +294,41 @@ class VisualWalkthroughTest {
                     .performScrollTo()
                     .assertIsDisplayed()
                 save("drawing-properties")
+                rule
+                    .onNodeWithContentDescription(
+                        if (landscape) "Close" else "Hide properties",
+                        substring = false,
+                    )
+                    .performClick()
+                rule
+                    .onNodeWithContentDescription("Navigate", substring = false)
+                    .performClick()
+                    .assertIsSelected()
+                val canvasNode =
+                    rule.onNodeWithContentDescription("Note drawing canvas", substring = false)
+                val beforePan =
+                    if (landscape) canvasNode.captureToImage().asAndroidBitmap() else null
+                canvasNode.performTouchInput {
+                    swipe(
+                        center,
+                        center - androidx.compose.ui.geometry.Offset(0f, height * .4f),
+                        400,
+                    )
+                }
+                rule.waitForIdle()
+                if (beforePan != null) {
+                    val afterPan = canvasNode.captureToImage().asAndroidBitmap()
+                    try {
+                        org.junit.Assert.assertFalse(
+                            "Navigate must pan a tall page at 1x in landscape",
+                            beforePan.sameAs(afterPan),
+                        )
+                    } finally {
+                        beforePan.recycle()
+                        afterPan.recycle()
+                    }
+                }
+                save("drawing-navigate")
             }
             step("pdf") {
                 open(ids.getValue("pdf"))
