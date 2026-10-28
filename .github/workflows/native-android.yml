@@ -1,0 +1,204 @@
+name: Native Android
+on:
+  push:
+    branches: [master]
+    paths: ['native-android/**', '.github/workflows/native-android.yml']
+  pull_request:
+    paths: ['native-android/**', '.github/workflows/native-android.yml']
+  workflow_dispatch:
+concurrency:
+  group: native-android-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  ANDROID_BUILD_NUMBER: ${{ github.run_number }}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Build pinned native Argon2 library
+        working-directory: native-android
+        run: python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
+      - name: Compile functional tests
+        id: compile
+        working-directory: native-android
+        run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify generated APK version
+        working-directory: native-android
+        run: |
+          python3 - <<'PYVERSION'
+          import os, pathlib, re, subprocess
+          build = int(os.environ['ANDROID_BUILD_NUMBER'])
+          apk = 'app/build/outputs/apk/debug/app-debug.apk'
+          aapt = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0/aapt'
+          badging = subprocess.check_output([str(aapt), 'dump', 'badging', apk], text=True)
+          code = int(re.search(r"versionCode='(\d+)'", badging).group(1))
+          name = re.search(r"versionName='([^']+)'", badging).group(1)
+          assert code == 1000 + build, (code, build)
+          assert name == f'2.0.1-build.{build}-preview', name
+          summary = f'Android preview: **{name}** — version code **{code}**\n'
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write(summary)
+          PYVERSION
+      - name: Release and performance checks
+        working-directory: native-android
+        run: ./gradlew --continue :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
+      - name: Report lint errors and generated schema
+        if: always()
+        working-directory: native-android
+        run: |
+          python3 - <<'PYREPORT'
+          import pathlib, xml.etree.ElementTree as ET
+          for report in pathlib.Path('app/build/reports').glob('lint-results-*.xml'):
+              for issue in ET.parse(report).getroot().findall('issue'):
+                  if issue.get('severity') in ('Error', 'Fatal'):
+                      print(ET.tostring(issue, encoding='unicode'))
+          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/4.json')
+          if schema.exists():
+              print('GENERATED_SCHEMA_4=' + schema.read_text().replace('\n', ''))
+          PYREPORT
+      - name: Enable KVM
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Instrumentation tests
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          ram-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          working-directory: native-android
+          script: bash tools/run_device_checks.sh
+
+      - name: Report device test failures
+        if: always()
+        working-directory: native-android
+        run: |
+          python3 - <<'PYREPORT'
+          import pathlib, xml.etree.ElementTree as ET
+          import base64
+          for capture in pathlib.Path("app/build/reports/ui-screenshots").glob("*.png"):
+              if capture.read_bytes().startswith(b"\x89PNG"):
+                  print("UI_CAPTURE_" + capture.stem + "=" + base64.b64encode(capture.read_bytes()).decode())
+          for capture in pathlib.Path("app/build/reports/visual-walkthrough").glob("review-*.png"):
+              print("AUDIT_CAPTURE_" + capture.stem + "=" + base64.b64encode(capture.read_bytes()).decode())
+          for failure_list in pathlib.Path("app/build/reports/visual-walkthrough").glob("*-failures.txt"):
+              print("WALKTHROUGH_ERRORS " + failure_list.name + " " + failure_list.read_text())
+          for report in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              for failure in ET.parse(report).getroot().iter('failure'):
+                  print(failure.text)
+          PYREPORT
+      - name: Upload preview and verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-android-preview
+          path: |
+            native-android/app/build/outputs/apk/debug/*.apk
+            native-android/app/build/outputs/apk/release/*.apk
+            native-android/benchmark/build/outputs/apk/**/*.apk
+            native-android/app/build/reports/
+            native-android/core/build/reports/
+            native-android/app/schemas/
+
+  visual-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Install Android build dependencies
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Build pinned native Argon2 library
+        working-directory: native-android
+        run: python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
+      - name: Generate synthetic walkthrough media
+        working-directory: native-android
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg python3-pil
+          mkdir -p app/src/androidTest/assets
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=480x270:rate=24' -t 8 -c:v libx264 -pix_fmt yuv420p app/src/androidTest/assets/visual-video.mp4
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -t 8 -c:a pcm_s16le app/src/androidTest/assets/visual-audio.wav
+      - name: Compile visual walkthrough APKs
+        id: visual-compile
+        working-directory: native-android
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Record synthetic app walkthroughs
+        if: ${{ !cancelled() && steps.visual-compile.outcome == 'success' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          VISUAL_AUDIT_ONLY: 'true'
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          ram-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          working-directory: native-android
+          script: bash tools/run_device_checks.sh
+      - name: Report visual evidence
+        if: always()
+        working-directory: native-android
+        run: |
+          python3 - <<'PYREPORT'
+          import pathlib, base64, xml.etree.ElementTree as ET
+          root = pathlib.Path('app/build/reports/visual-walkthrough')
+          for capture in sorted(root.glob('review-*.jpg')):
+              print('AUDIT_CAPTURE_' + capture.stem + '=' + base64.b64encode(capture.read_bytes()).decode())
+          for failure_list in root.glob('*-failures.txt'):
+              print('WALKTHROUGH_ERRORS ' + failure_list.name + ' ' + failure_list.read_text())
+          for index in root.glob('*-index.txt'):
+              print('WALKTHROUGH_INDEX ' + index.name + ' ' + index.read_text())
+          for report in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              for failure in ET.parse(report).getroot().iter('failure'):
+                  print(failure.text)
+          PYREPORT
+      - name: Upload recordings, captures and layout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-audit
+          path: |
+            native-android/app/build/reports/visual-walkthrough/
+            native-android/app/build/reports/androidTests/
+            native-android/app/build/outputs/apk/debug/*.apk

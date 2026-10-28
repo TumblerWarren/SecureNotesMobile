@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test APK only: serves fixed synthetic bytes, never device files. -->
+        <provider android:name="app.securenote.vault.SyntheticFolderProvider" android:authorities="app.securenote.syntheticfolders" android:exported="true" android:grantUriPermissions="true" />
+    </application>
+</manifest>
