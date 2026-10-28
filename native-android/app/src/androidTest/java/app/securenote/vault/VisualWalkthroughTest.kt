@@ -162,17 +162,26 @@ class VisualWalkthroughTest {
                 home()
                 rule.onNodeWithTag("nav-folders").performClick()
                 if (landscape) {
-                    waitText("Travel documents")
-                    // Compact headers omit the count. Two fixture folders precede Unfiled.
-                    rule.onNodeWithTag("vault-library").performScrollToIndex(2)
-                    waitText("Organize")
+                    tool("Sort").performClick()
+                    rule.waitUntil(15000) {
+                        rule
+                            .onAllNodes(
+                                hasText("Organize unfiled", substring = false) and isEnabled()
+                            )
+                            .fetchSemanticsNodes()
+                            .isNotEmpty()
+                    }
+                    rule
+                        .onNodeWithText("Organize unfiled", substring = false)
+                        .performScrollTo()
+                        .performClick()
                 } else {
                     waitText("16 items", true)
                     rule
                         .onNodeWithTag("vault-library")
                         .performScrollToNode(hasText("Organize", substring = false))
+                    rule.onNodeWithText("Organize", substring = false).performClick()
                 }
-                rule.onNodeWithText("Organize", substring = false).performClick()
                 rule
                     .onNodeWithTag("vault-library")
                     .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))

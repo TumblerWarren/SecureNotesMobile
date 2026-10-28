@@ -283,6 +283,21 @@ fun PaperLibrary(
                                 sorting = false
                             },
                         )
+                        if (browsing && !selecting)
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (parent == null) "Organize unfiled" else "Organize files"
+                                    )
+                                },
+                                leadingIcon = { PaperIcon(PaperGlyph.Move) },
+                                enabled = pages.itemCount > 0,
+                                onClick = {
+                                    selecting = true
+                                    chosen = emptySet()
+                                    sorting = false
+                                },
+                            )
                         DropdownMenuItem(
                             text = { Text("New folder") },
                             onClick = {
