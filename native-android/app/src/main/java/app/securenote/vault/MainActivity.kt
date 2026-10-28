@@ -24,8 +24,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -314,17 +314,30 @@ internal fun VaultApp(model: VaultModel) {
             else -> {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     PaperLibrary(model, libraryState) { openAdd() }
-                    FloatingActionButton(
-                        { openAdd() },
-                        containerColor = Paper.Accent,
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(28.dp),
-                        modifier =
-                            Modifier.align(Alignment.BottomEnd).padding(24.dp).testTag("add-item"),
-                    ) {
-                        PaperIcon(PaperGlyph.Add, "Add")
-                    }
+                    if (navigationLabels)
+                        FloatingActionButton(
+                            { openAdd() },
+                            containerColor = Paper.Accent,
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(28.dp),
+                            modifier =
+                                Modifier.align(Alignment.BottomEnd)
+                                    .padding(24.dp)
+                                    .testTag("add-item"),
+                        ) {
+                            PaperIcon(PaperGlyph.Add, "Add")
+                        }
                 }
+                if (!navigationLabels)
+                    Button(
+                        { openAdd() },
+                        modifier =
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("add-item"),
+                    ) {
+                        PaperIcon(PaperGlyph.Add)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add item")
+                    }
                 HorizontalDivider(color = Paper.Line)
                 Row(
                     Modifier.fillMaxWidth()

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,7 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -80,6 +83,7 @@ fun PaperFileBadge(mime: String, modifier: Modifier = Modifier, name: String = "
 
 @Composable
 fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
+    val largeText = LocalDensity.current.fontScale > 1.3f
     val query by model.query.collectAsState()
     val category by model.category.collectAsState()
     val pages = model.pages.collectAsLazyPagingItems()
@@ -129,13 +133,22 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                         selecting = !selecting
                         chosen = emptySet()
                     }) {
-                        Text(if (selecting) "Done" else "Select")
+                        if (largeText)
+                            PaperIcon(
+                                PaperGlyph.List,
+                                if (selecting) "Finish selecting" else "Select items",
+                            )
+                        else Text(if (selecting) "Done" else "Select")
                     }
                     TextButton({ model.toggleGrid() }) {
-                        Text(if (grid) "List view" else "Grid view")
+                        if (largeText)
+                            PaperIcon(PaperGlyph.Table, if (grid) "List view" else "Grid view")
+                        else Text(if (grid) "List view" else "Grid view")
                     }
                     Box {
-                        TextButton({ sorting = true }) { Text("Sort") }
+                        TextButton({ sorting = true }) {
+                            if (largeText) PaperIcon(PaperGlyph.More, "Sort") else Text("Sort")
+                        }
                         DropdownMenu(sorting, { sorting = false }) {
                             listOf("modified" to "Modified", "name" to "Name", "size" to "Size")
                                 .forEach { (key, label) ->
@@ -151,8 +164,8 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                     }
                 }
                 if (chosen.isNotEmpty())
-                    Row {
-                        Text("${chosen.size} selected", Modifier.weight(1f).padding(12.dp))
+                    FlowRow {
+                        Text("${chosen.size} selected", Modifier.padding(12.dp))
                         TextButton({ movingFiles = true }) { Text("Move") }
                         TextButton({ grouping = true }) { Text("By type") }
                         TextButton({ chosen = emptySet() }) { Text("Clear") }
@@ -213,13 +226,19 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     filters.forEach { (key, label) ->
                         Column(
-                            Modifier.width(if (key == "documents") 104.dp else 72.dp)
-                                .clickable { model.showLibrary(key) }
+                            Modifier.widthIn(min = 72.dp)
+                                .selectable(
+                                    selected = category == key,
+                                    role = Role.Tab,
+                                    onClick = { model.showLibrary(key) },
+                                )
                                 .padding(top = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
                                 label,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (category == key) Paper.Accent else Paper.Muted,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
