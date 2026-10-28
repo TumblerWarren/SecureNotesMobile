@@ -598,8 +598,11 @@ class VisualWalkthroughTest {
         }
         Thread.sleep(650)
         if (name.contains("keyboard") && (name.contains("password") || name.contains("recovery"))) {
-            val focused = rule.onAllNodes(isFocused()).fetchSemanticsNodes().firstOrNull()
+            val inputs = rule.onAllNodes(isFocused())
+            inputs.onFirst().assertIsDisplayed()
+            val focused = inputs.fetchSemanticsNodes().firstOrNull()
             checkNotNull(focused) { "No focused input in $name" }
+            val inputBottom = focused.positionInWindow.y + focused.size.height
             val frame = android.graphics.Rect()
             instrumentation.runOnMainSync {
                 val roots = WindowInspector.getGlobalWindowViews()
@@ -607,8 +610,8 @@ class VisualWalkthroughTest {
                 active.getWindowVisibleDisplayFrame(frame)
             }
             assertTrue(
-                "Focused input in $name extends to ${focused.boundsInWindow.bottom}, keyboard starts at ${frame.bottom}",
-                focused.boundsInWindow.bottom <= frame.bottom + 2,
+                "Focused input in $name extends to ${inputBottom}, keyboard starts at ${frame.bottom}",
+                inputBottom <= frame.bottom + 2,
             )
         }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
