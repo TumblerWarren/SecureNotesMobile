@@ -30,6 +30,13 @@ jobs:
       - name: Build pinned native Argon2 library
         working-directory: native-android
         run: python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
+      - name: Generate synthetic walkthrough media
+        working-directory: native-android
+        run: |
+          mkdir -p app/src/androidTest/assets
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=480x270:rate=24' -t 8 -c:v libx264 -pix_fmt yuv420p app/src/androidTest/assets/visual-video.mp4
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'sine=frequency=440:sample_rate=44100' -t 8 -c:a pcm_s16le app/src/androidTest/assets/visual-audio.wav
+          python3 -m pip install Pillow
       - name: Compile functional tests
         id: compile
         working-directory: native-android
@@ -80,6 +87,10 @@ jobs:
           for capture in pathlib.Path("app/build/reports/ui-screenshots").glob("*.png"):
               if capture.read_bytes().startswith(b"\x89PNG"):
                   print("UI_CAPTURE_" + capture.stem + "=" + base64.b64encode(capture.read_bytes()).decode())
+          for capture in pathlib.Path("app/build/reports/visual-walkthrough").glob("review-*.png"):
+              print("AUDIT_CAPTURE_" + capture.stem + "=" + base64.b64encode(capture.read_bytes()).decode())
+          for failure_list in pathlib.Path("app/build/reports/visual-walkthrough").glob("*-failures.txt"):
+              print("WALKTHROUGH_ERRORS " + failure_list.name + " " + failure_list.read_text())
           for report in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
               for failure in ET.parse(report).getroot().iter('failure'):
                   print(failure.text)
