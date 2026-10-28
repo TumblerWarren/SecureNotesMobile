@@ -447,7 +447,9 @@ class VisualWalkthroughTest {
                 open(ids.getValue("epub"))
                 waitTag("epub-content")
                 save("epub-reading")
-                rule.onNodeWithTag("epub-content").performTouchInput { swipeLeft() }
+                rule.onNodeWithTag("epub-content").performTouchInput {
+                    swipeLeft(durationMillis = 1000)
+                }
                 rule.waitUntil(5000) {
                     var offset = 0
                     instrumentation.runOnMainSync {

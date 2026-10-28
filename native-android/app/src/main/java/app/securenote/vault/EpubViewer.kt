@@ -12,7 +12,6 @@ import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.text.style.URLSpan
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -192,31 +191,9 @@ internal class EpubScrollView(context: Context, private val reader: EpubTextView
     var onProgress: (Int, Int, Int) -> Unit = { _, _, _ -> }
     private var appliedFrame: EpubFrame? = null
     private var restored = false
-    private val gestures =
-        GestureDetector(
-            context,
-            object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(event: MotionEvent): Boolean = true
-
-                override fun onFling(
-                    first: MotionEvent?,
-                    last: MotionEvent,
-                    velocityX: Float,
-                    velocityY: Float,
-                ): Boolean {
-                    if (first == null) return false
-                    val dx = last.x - first.x
-                    val dy = last.y - first.y
-                    if (
-                        kotlin.math.abs(dx) < 48 * resources.displayMetrics.density ||
-                            kotlin.math.abs(dx) < kotlin.math.abs(dy) * 1.5f
-                    )
-                        return false
-                    onPage(if (dx < 0) 1 else -1)
-                    return true
-                }
-            },
-        )
+    private var startX = 0f
+    private var startY = 0f
+    private var pageGesture = false
 
     init {
         tag = "epub-scroll"
@@ -247,12 +224,31 @@ internal class EpubScrollView(context: Context, private val reader: EpubTextView
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (gestures.onTouchEvent(event) && event.actionMasked == MotionEvent.ACTION_UP) {
-            val cancel = MotionEvent.obtain(event)
-            cancel.action = MotionEvent.ACTION_CANCEL
-            super.dispatchTouchEvent(cancel)
-            cancel.recycle()
-            return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                startX = event.x
+                startY = event.y
+                pageGesture = true
+            }
+            MotionEvent.ACTION_POINTER_DOWN,
+            MotionEvent.ACTION_CANCEL -> pageGesture = false
+            MotionEvent.ACTION_UP -> {
+                val dx = event.x - startX
+                val dy = event.y - startY
+                val page =
+                    pageGesture &&
+                        kotlin.math.abs(dx) >= 48 * resources.displayMetrics.density &&
+                        kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                pageGesture = false
+                if (page) {
+                    val cancel = MotionEvent.obtain(event)
+                    cancel.action = MotionEvent.ACTION_CANCEL
+                    super.dispatchTouchEvent(cancel)
+                    cancel.recycle()
+                    onPage(if (dx < 0) 1 else -1)
+                    return true
+                }
+            }
         }
         return super.dispatchTouchEvent(event)
     }
