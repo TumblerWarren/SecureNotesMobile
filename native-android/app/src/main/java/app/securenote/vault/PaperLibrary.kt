@@ -343,7 +343,6 @@ fun PaperLibrary(
                             FilterChip(
                                 selected = category == key,
                                 onClick = { model.showLibrary(key) },
-                                modifier = Modifier.weight(1f, fill = false),
                                 label = {
                                     Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 },
@@ -400,12 +399,19 @@ fun PaperLibrary(
                     count = pages.itemCount,
                     key = { pages.peek(it)?.id ?: "placeholder/$it" },
                     span = { index ->
-                        val mime = pages.peek(index)?.mime.orEmpty()
-                        GridItemSpan(
-                            if (!grid || mime.startsWith("video/") || mime.startsWith("audio/"))
-                                maxLineSpan
-                            else 1
-                        )
+                        fun wide(at: Int): Boolean {
+                            if (at !in 0 until pages.itemCount) return false
+                            val mime = pages.peek(at)?.mime.orEmpty()
+                            return mime.startsWith("video/") || mime.startsWith("audio/")
+                        }
+                        val finalItem =
+                            index == pages.itemCount - 1 &&
+                                pages.loadState.append.endOfPaginationReached
+                        // Fill a lone card before a full-width media row without changing sort
+                        // order.
+                        val lone =
+                            maxCurrentLineSpan == maxLineSpan && (wide(index + 1) || finalItem)
+                        GridItemSpan(if (!grid || wide(index) || lone) maxLineSpan else 1)
                     },
                 ) { index ->
                     val item = pages[index]
@@ -413,6 +419,7 @@ fun PaperLibrary(
                         val checked = item.id in chosen
                         Box(
                             Modifier.fillMaxWidth()
+                                .background(Paper.Surface, RoundedCornerShape(12.dp))
                                 .border(
                                     if (checked) 2.dp else 0.dp,
                                     if (checked) Paper.Accent
