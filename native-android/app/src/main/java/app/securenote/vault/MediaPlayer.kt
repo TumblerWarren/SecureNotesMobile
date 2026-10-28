@@ -56,6 +56,7 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
     val player =
         remember(id) {
             ExoPlayer.Builder(context)
+                .setLooper(android.os.Looper.getMainLooper())
                 .setSeekBackIncrementMs(10000)
                 .setSeekForwardIncrementMs(10000)
                 .setMediaSourceFactory(
@@ -72,40 +73,43 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 .build()
         }
     LaunchedEffect(id) {
-        try {
-            val siblings = withContext(Dispatchers.IO) { model.store.dao.mediaSiblings(id, audio) }
-            val selected =
-                ItemSummary(
-                    item.rowId,
-                    item.id,
-                    item.name,
-                    item.mime,
-                    item.size,
-                    item.updated,
-                    item.pinned,
+        withContext(Dispatchers.Main.immediate) {
+            try {
+                val siblings =
+                    withContext(Dispatchers.IO) { model.store.dao.mediaSiblings(id, audio) }
+                val selected =
+                    ItemSummary(
+                        item.rowId,
+                        item.id,
+                        item.name,
+                        item.mime,
+                        item.size,
+                        item.updated,
+                        item.pinned,
+                    )
+                queue = if (siblings.any { it.id == id }) siblings else listOf(selected) + siblings
+                player.setMediaItems(
+                    queue.map {
+                        MediaItem.Builder().setUri("vault://${it.id}").setMimeType(it.mime).build()
+                    },
+                    queue.indexOfFirst { it.id == id }.coerceAtLeast(0),
+                    0,
                 )
-            queue = if (siblings.any { it.id == id }) siblings else listOf(selected) + siblings
-            player.setMediaItems(
-                queue.map {
-                    MediaItem.Builder().setUri("vault://${it.id}").setMimeType(it.mime).build()
-                },
-                queue.indexOfFirst { it.id == id }.coerceAtLeast(0),
-                0,
-            )
-            player.prepare()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            if (
-                context.applicationInfo.flags and
-                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-            )
-                android.util.Log.w(
-                    "VaultMedia",
-                    "Setup failed: ${e.javaClass.name}\n" +
-                        e.stackTrace.take(12).joinToString("\n"),
+                player.prepare()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (
+                    context.applicationInfo.flags and
+                        android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
                 )
-            error = "This media could not be opened. The encrypted file is kept."
+                    android.util.Log.w(
+                        "VaultMedia",
+                        "Setup failed: ${e.javaClass.name}\n" +
+                            e.stackTrace.take(12).joinToString("\n"),
+                    )
+                error = "This media could not be opened. The encrypted file is kept."
+            }
         }
     }
     DisposableEffect(player) {
@@ -153,17 +157,21 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
         }
     }
     LaunchedEffect(player) {
-        while (isActive && model.unlocked.value) {
-            position = player.currentPosition.coerceAtLeast(0)
-            duration = player.duration.coerceAtLeast(0)
-            delay(250)
+        withContext(Dispatchers.Main.immediate) {
+            while (isActive && model.unlocked.value) {
+                position = player.currentPosition.coerceAtLeast(0)
+                duration = player.duration.coerceAtLeast(0)
+                delay(250)
+            }
         }
     }
     LaunchedEffect(deadline) {
-        if (deadline > 0) {
-            delay((deadline - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0))
-            if (model.unlocked.value) player.pause()
-            deadline = 0
+        withContext(Dispatchers.Main.immediate) {
+            if (deadline > 0) {
+                delay((deadline - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0))
+                if (model.unlocked.value) player.pause()
+                deadline = 0
+            }
         }
     }
     fun playPause() {
