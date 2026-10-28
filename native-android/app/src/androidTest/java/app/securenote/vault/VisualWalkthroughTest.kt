@@ -627,6 +627,16 @@ class VisualWalkthroughTest {
         }
     }
 
+    private fun inputViewport(): android.graphics.Rect {
+        val frame = android.graphics.Rect()
+        instrumentation.runOnMainSync {
+            val roots = WindowInspector.getGlobalWindowViews()
+            val active = roots.lastOrNull { it.hasWindowFocus() } ?: roots.last { it.isShown }
+            active.getWindowVisibleDisplayFrame(frame)
+        }
+        return frame
+    }
+
     private fun save(name: String) {
         rule.waitForIdle()
         // Test-APK only: allow synthetic dialog windows to appear in recordings. Production
@@ -639,16 +649,33 @@ class VisualWalkthroughTest {
             val focused = inputs.fetchSemanticsNodes().firstOrNull()
             checkNotNull(focused) { "No focused input in $name" }
             val inputBottom = focused.positionInWindow.y + focused.size.height
-            val frame = android.graphics.Rect()
-            instrumentation.runOnMainSync {
-                val roots = WindowInspector.getGlobalWindowViews()
-                val active = roots.lastOrNull { it.hasWindowFocus() } ?: roots.last { it.isShown }
-                active.getWindowVisibleDisplayFrame(frame)
-            }
+            val frame = inputViewport()
             assertTrue(
                 "Focused input in $name extends to ${inputBottom}, keyboard starts at ${frame.bottom}",
                 inputBottom <= frame.bottom + 2,
             )
+        }
+        if (prefix == "landscape" && name in listOf("search-keyboard", "note-keyboard")) {
+            val control =
+                if (name == "search-keyboard") rule.onNodeWithTag("vault-search")
+                else rule.onNodeWithContentDescription("Bold", substring = false)
+            control.assertIsDisplayed()
+            val node = control.fetchSemanticsNode()
+            val bottom = node.positionInWindow.y + node.size.height
+            assertTrue(
+                "$name control extends to $bottom behind keyboard at ${inputViewport().bottom}",
+                bottom <= inputViewport().bottom + 2,
+            )
+            if (name == "search-keyboard") rule.onNodeWithTag("nav-folders").assertDoesNotExist()
+            else {
+                rule.onNodeWithContentDescription("Back", substring = false).assertDoesNotExist()
+                val editor = rule.onAllNodesWithTag("native-note-body").onFirst()
+                editor.assertIsDisplayed()
+                assertTrue(
+                    "Notes need a visible writing line above the keyboard",
+                    editor.fetchSemanticsNode().boundsInWindow.height >= 16,
+                )
+            }
         }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         val file = "$prefix-${(++ordinal).toString().padStart(2, '0')}-$name"

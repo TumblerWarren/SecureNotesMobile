@@ -6,6 +6,8 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -458,6 +460,7 @@ internal fun PaperEditorTool(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun RichTextBlock(
     block: NoteBlock,
@@ -467,6 +470,8 @@ private fun RichTextBlock(
 ) {
     val editCallback by rememberUpdatedState(onEdit)
     val focusCallback by rememberUpdatedState(focus)
+    val caretVisibility = remember { BringIntoViewRequester() }
+    val inputScope = rememberCoroutineScope()
     val initial = remember(block.id) { runCatching { session.text(block) } }
     if (initial.isFailure) {
         Text(
@@ -493,11 +498,31 @@ private fun RichTextBlock(
                 highlightColor = android.graphics.Color.rgb(243, 223, 213)
                 setSelectAllOnFocus(false)
                 this.onEdit = { editCallback(it) }
-                this.onActive = { focusCallback(it, true) }
+                this.onActive = { edit ->
+                    focusCallback(edit, true)
+                    inputScope.launch(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                        kotlinx.coroutines.delay(250)
+                        if (edit.isAttachedToWindow && edit.hasFocus()) {
+                            val caret = android.graphics.Rect()
+                            edit.getFocusedRect(caret)
+                            caretVisibility.bringIntoView(
+                                androidx.compose.ui.geometry.Rect(
+                                    caret.left.toFloat(),
+                                    caret.top.toFloat(),
+                                    caret.right.toFloat(),
+                                    caret.bottom.toFloat(),
+                                )
+                            )
+                        }
+                    }
+                }
                 session.attach(this)
             }
         },
-        modifier = Modifier.fillMaxWidth().testTag("native-note-body"),
+        modifier =
+            Modifier.fillMaxWidth()
+                .bringIntoViewRequester(caretVisibility)
+                .testTag("native-note-body"),
         onRelease = {
             focusCallback(it, false)
             session.release(it)

@@ -173,7 +173,7 @@ internal fun VaultApp(model: VaultModel) {
         keyboard?.hide()
         model.back()
     }
-    Column(
+    BoxWithConstraints(
         Modifier.fillMaxSize()
             .background(Paper.Background)
             .safeDrawingPadding()
@@ -181,205 +181,220 @@ internal fun VaultApp(model: VaultModel) {
             .semantics { testTagsAsResourceId = true }
             .secureEditing()
     ) {
-        if ((!open || recovery != null) && !imeVisible) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "SecureNote",
-                    style =
-                        MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Serif),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (open)
-                    TextButton({
-                        model.lock()
-                        focus.clearFocus()
-                        keyboard?.hide()
-                    }) {
-                        PaperIcon(PaperGlyph.Lock)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Lock")
-                    }
-                else PaperIcon(PaperGlyph.Lock, color = Paper.Muted)
-            }
-        }
-        if (busy)
-            LinearProgressIndicator(
-                Modifier.fillMaxWidth().height(2.dp),
-                color = Paper.Accent,
-                trackColor = Paper.Inset,
-            )
-        if (message.isNotEmpty()) {
-            Surface(
-                color =
-                    if (messageSuccess) Paper.AccentSoft
-                    else MaterialTheme.colorScheme.errorContainer,
-                modifier =
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics {
-                        liveRegion = LiveRegionMode.Polite
-                    },
-                shape = RoundedCornerShape(10.dp),
-            ) {
+        val hideChrome = imeVisible || maxHeight < 180.dp
+        Column(Modifier.fillMaxSize()) {
+            if ((!open || recovery != null) && !hideChrome) {
                 Row(
-                    Modifier.padding(start = 12.dp),
+                    Modifier.fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .heightIn(min = 48.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        message,
-                        style = MaterialTheme.typography.bodySmall,
+                        "SecureNote",
+                        style =
+                            MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FontFamily.Serif
+                            ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton({ model.message.value = "" }) {
-                        PaperIcon(PaperGlyph.Close, "Dismiss message")
+                    if (open)
+                        TextButton({
+                            model.lock()
+                            focus.clearFocus()
+                            keyboard?.hide()
+                        }) {
+                            PaperIcon(PaperGlyph.Lock)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Lock")
+                        }
+                    else PaperIcon(PaperGlyph.Lock, color = Paper.Muted)
+                }
+            }
+            if (busy)
+                LinearProgressIndicator(
+                    Modifier.fillMaxWidth().height(2.dp),
+                    color = Paper.Accent,
+                    trackColor = Paper.Inset,
+                )
+            if (message.isNotEmpty()) {
+                Surface(
+                    color =
+                        if (messageSuccess) Paper.AccentSoft
+                        else MaterialTheme.colorScheme.errorContainer,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(
+                        Modifier.padding(start = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton({ model.message.value = "" }) {
+                            PaperIcon(PaperGlyph.Close, "Dismiss message")
+                        }
                     }
                 }
             }
-        }
-        if (status.isNotBlank())
-            Text(
-                status,
-                style = MaterialTheme.typography.bodySmall,
-                color = Paper.Muted,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
-            )
-        when {
-            !open ->
-                Column(
-                    Modifier.weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = if (imeVisible) 4.dp else 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    LockScreen(model, busy)
-                }
-            recovery != null ->
-                Column(
-                    Modifier.weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    Text("Record your recovery key", style = MaterialTheme.typography.headlineLarge)
-                    Text(
-                        "Keep this key somewhere safe, outside this phone. Anyone with it can unlock your vault. It cannot restore deleted items.",
-                        color = Paper.Muted,
-                    )
-                    Surface(
-                        color = Paper.Surface,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, Paper.Line),
+            if (status.isNotBlank())
+                Text(
+                    status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Paper.Muted,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+                )
+            when {
+                !open ->
+                    Column(
+                        Modifier.weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = if (hideChrome) 4.dp else 16.dp,
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        LockScreen(model, busy, hideChrome)
+                    }
+                recovery != null ->
+                    Column(
+                        Modifier.weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        Text(
+                            "Record your recovery key",
+                            style = MaterialTheme.typography.headlineLarge,
+                        )
+                        Text(
+                            "Keep this key somewhere safe, outside this phone. Anyone with it can unlock your vault. It cannot restore deleted items.",
+                            color = Paper.Muted,
+                        )
+                        Surface(
+                            color = Paper.Surface,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Paper.Line),
                         ) {
-                            recovery!!
-                                .joinToString("") { "%02x".format(it) }
-                                .chunked(16)
-                                .forEach { line ->
-                                    Text(
-                                        line.chunked(8).joinToString("  "),
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 18.sp,
-                                    )
-                                }
+                            Column(
+                                Modifier.fillMaxWidth().padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                recovery!!
+                                    .joinToString("") { "%02x".format(it) }
+                                    .chunked(16)
+                                    .forEach { line ->
+                                        Text(
+                                            line.chunked(8).joinToString("  "),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 18.sp,
+                                        )
+                                    }
+                            }
+                        }
+                        var confirmed by remember { mutableStateOf(false) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(confirmed, { confirmed = it })
+                            Text(
+                                "I recorded the key in a safe place",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Button(
+                            { model.dismissRecovery() },
+                            enabled = confirmed,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        ) {
+                            Text("Continue")
                         }
                     }
-                    var confirmed by remember { mutableStateOf(false) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(confirmed, { confirmed = it })
-                        Text(
-                            "I recorded the key in a safe place",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                selected != null ->
+                    Box(Modifier.weight(1f).fillMaxWidth()) { ItemScreen(model, selected!!) }
+                else -> {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        PaperLibrary(model, libraryState, { selectingFiles = it }) { openAdd() }
                     }
-                    Button(
-                        { model.dismissRecovery() },
-                        enabled = confirmed,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                    ) {
-                        Text("Continue")
-                    }
-                }
-            selected != null ->
-                Box(Modifier.weight(1f).fillMaxWidth()) { ItemScreen(model, selected!!) }
-            else -> {
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    PaperLibrary(model, libraryState, { selectingFiles = it }) { openAdd() }
-                }
-                if (!imeVisible && !selectingFiles) {
-                    HorizontalDivider(color = Paper.Line)
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .background(Paper.Background)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        listOf(
-                                Triple("all", "Vault", PaperGlyph.Shield),
-                                Triple("notes", "Notes", PaperGlyph.Note),
-                                Triple("folders", "Folders", PaperGlyph.Vault),
-                                Triple("settings", "Settings", PaperGlyph.Settings),
-                            )
-                            .forEach { (key, label, glyph) ->
-                                val active =
-                                    if (key == "all")
-                                        !model.folderBrowsing.collectAsState().value &&
-                                            category == "all"
-                                    else if (key == "folders")
-                                        model.folderBrowsing.collectAsState().value
-                                    else category == key
-                                TextButton(
-                                    {
-                                        if (key == "settings") settings = true
-                                        else if (key == "folders") model.openFolder(null)
-                                        else {
-                                            model.folderBrowsing.value = false
-                                            model.showLibrary(key)
-                                        }
-                                    },
-                                    modifier =
-                                        Modifier.weight(1f).testTag("nav-$key").semantics {
-                                            this.selected = active
-                                            contentDescription = label
+                    if (!hideChrome && !selectingFiles) {
+                        HorizontalDivider(color = Paper.Line)
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .background(Paper.Background)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            listOf(
+                                    Triple("all", "Vault", PaperGlyph.Shield),
+                                    Triple("notes", "Notes", PaperGlyph.Note),
+                                    Triple("folders", "Folders", PaperGlyph.Vault),
+                                    Triple("settings", "Settings", PaperGlyph.Settings),
+                                )
+                                .forEach { (key, label, glyph) ->
+                                    val active =
+                                        if (key == "all")
+                                            !model.folderBrowsing.collectAsState().value &&
+                                                category == "all"
+                                        else if (key == "folders")
+                                            model.folderBrowsing.collectAsState().value
+                                        else category == key
+                                    TextButton(
+                                        {
+                                            if (key == "settings") settings = true
+                                            else if (key == "folders") model.openFolder(null)
+                                            else {
+                                                model.folderBrowsing.value = false
+                                                model.showLibrary(key)
+                                            }
                                         },
-                                    contentPadding =
-                                        PaddingValues(vertical = 8.dp, horizontal = 0.dp),
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier =
+                                            Modifier.weight(1f).testTag("nav-$key").semantics {
+                                                this.selected = active
+                                                contentDescription = label
+                                            },
+                                        contentPadding =
+                                            PaddingValues(vertical = 8.dp, horizontal = 0.dp),
                                     ) {
-                                        Box(
-                                            Modifier.size(48.dp, 28.dp)
-                                                .background(
-                                                    if (active) Paper.AccentSoft
-                                                    else Color.Transparent,
-                                                    RoundedCornerShape(14.dp),
-                                                ),
-                                            contentAlignment = Alignment.Center,
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
                                         ) {
-                                            PaperIcon(
-                                                glyph,
-                                                color = if (active) Paper.Accent else Paper.Muted,
-                                            )
+                                            Box(
+                                                Modifier.size(48.dp, 28.dp)
+                                                    .background(
+                                                        if (active) Paper.AccentSoft
+                                                        else Color.Transparent,
+                                                        RoundedCornerShape(14.dp),
+                                                    ),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                PaperIcon(
+                                                    glyph,
+                                                    color =
+                                                        if (active) Paper.Accent else Paper.Muted,
+                                                )
+                                            }
+                                            if (navigationLabels)
+                                                Text(
+                                                    label,
+                                                    color =
+                                                        if (active) Paper.Accent else Paper.Muted,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                )
                                         }
-                                        if (navigationLabels)
-                                            Text(
-                                                label,
-                                                color = if (active) Paper.Accent else Paper.Muted,
-                                                style = MaterialTheme.typography.labelSmall,
-                                            )
                                     }
                                 }
-                            }
+                        }
                     }
                 }
             }
@@ -453,7 +468,7 @@ internal fun VaultApp(model: VaultModel) {
 }
 
 @Composable
-private fun LockScreen(model: VaultModel, busy: Boolean) {
+private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     var recoveryMode by remember { mutableStateOf(false) }
@@ -461,7 +476,7 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     val creating = !model.store.exists
-    val keyboardOpen = paperKeyboardVisible()
+    val keyboardOpen = paperKeyboardVisible() || compactInput
     if (!keyboardOpen) {
         Text(
             if (recoveryMode) "A way back in."
@@ -620,102 +635,108 @@ private fun ItemScreen(model: VaultModel, id: String) {
             failed = true
         }
     }
-    val compactKeyboard =
-        paperKeyboardVisible() &&
-            androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
-                android.content.res.Configuration.ORIENTATION_LANDSCAPE
-    Column(Modifier.fillMaxSize()) {
-        if (!compactKeyboard)
-            Row(
-                Modifier.fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .heightIn(min = 52.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PaperAction("Back", PaperGlyph.Back) {
-                    focus.clearFocus()
-                    keyboard?.hide()
-                    model.back()
-                }
-                Text(
-                    when {
-                        item?.mime == "application/x-securenote" -> "Notes"
-                        item?.mime?.startsWith("audio/") == true -> "Now playing"
-                        item?.mime?.startsWith("video/") == true -> "Video"
-                        else -> item?.name.orEmpty()
-                    },
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                PaperAction("Lock", PaperGlyph.Lock) {
-                    model.lock()
-                    focus.clearFocus()
-                    keyboard?.hide()
-                }
-                Box {
-                    IconButton({ menu = true }, enabled = item != null) {
-                        PaperIcon(PaperGlyph.More, "Item options")
+    val keyboardOpen = paperKeyboardVisible()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compactKeyboard =
+            maxHeight < 180.dp ||
+                (keyboardOpen &&
+                    androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                        android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+        Column(Modifier.fillMaxSize()) {
+            if (!compactKeyboard)
+                Row(
+                    Modifier.fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .heightIn(min = 52.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PaperAction("Back", PaperGlyph.Back) {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                        model.back()
                     }
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(if (item?.pinned == true) "Unpin" else "Pin") },
-                            onClick = {
-                                menu = false
-                                model.pin(id)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menu = false
-                                deleting = true
-                            },
-                        )
+                    Text(
+                        when {
+                            item?.mime == "application/x-securenote" -> "Notes"
+                            item?.mime?.startsWith("audio/") == true -> "Now playing"
+                            item?.mime?.startsWith("video/") == true -> "Video"
+                            else -> item?.name.orEmpty()
+                        },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    PaperAction("Lock", PaperGlyph.Lock) {
+                        model.lock()
+                        focus.clearFocus()
+                        keyboard?.hide()
+                    }
+                    Box {
+                        IconButton({ menu = true }, enabled = item != null) {
+                            PaperIcon(PaperGlyph.More, "Item options")
+                        }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (item?.pinned == true) "Unpin" else "Pin") },
+                                onClick = {
+                                    menu = false
+                                    model.pin(id)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menu = false
+                                    deleting = true
+                                },
+                            )
+                        }
                     }
                 }
+            HorizontalDivider(color = Paper.Line)
+            if (failed) {
+                Text("This item is unavailable.", modifier = Modifier.padding(24.dp))
+                return
             }
-        HorizontalDivider(color = Paper.Line)
-        if (failed) {
-            Text("This item is unavailable.", modifier = Modifier.padding(24.dp))
-            return
-        }
-        val value = item
-        if (value == null) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            return
-        }
-        if (deleting)
-            ConfirmPaperDelete(value.name, { deleting = false }) {
-                deleting = false
-                model.delete(id)
+            val value = item
+            if (value == null) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                return
             }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                value.mime == "application/x-securenote" -> NativeNoteEditor(model, value)
-                isEpubFile(value.mime, value.name) -> EpubViewer(model, id)
-                value.mime.startsWith("audio/") || value.mime.startsWith("video/") ->
-                    SecureMediaViewer(model, id, value)
-                value.mime == "application/pdf" -> SecurePdfReader(model, id)
-                value.mime.startsWith("image/") -> ImageViewer(model, id)
-                value.mime.startsWith("text/") -> TextViewer(model, id)
-                else ->
-                    Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        PaperFileBadge(value.mime)
-                        Text(value.name, style = MaterialTheme.typography.headlineMedium)
-                        Text(
-                            "${fileKind(value.mime)} · ${fileSize(value.size)}",
-                            color = Paper.Muted,
-                        )
-                        Text(
-                            "Your file is stored in this vault. Internal preview is not available for this format.",
-                            color = Paper.Muted,
-                        )
-                    }
+            if (deleting)
+                ConfirmPaperDelete(value.name, { deleting = false }) {
+                    deleting = false
+                    model.delete(id)
+                }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    value.mime == "application/x-securenote" -> NativeNoteEditor(model, value)
+                    isEpubFile(value.mime, value.name) -> EpubViewer(model, id)
+                    value.mime.startsWith("audio/") || value.mime.startsWith("video/") ->
+                        SecureMediaViewer(model, id, value)
+                    value.mime == "application/pdf" -> SecurePdfReader(model, id)
+                    value.mime.startsWith("image/") -> ImageViewer(model, id)
+                    value.mime.startsWith("text/") -> TextViewer(model, id)
+                    else ->
+                        Column(
+                            Modifier.fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            PaperFileBadge(value.mime)
+                            Text(value.name, style = MaterialTheme.typography.headlineMedium)
+                            Text(
+                                "${fileKind(value.mime)} · ${fileSize(value.size)}",
+                                color = Paper.Muted,
+                            )
+                            Text(
+                                "Your file is stored in this vault. Internal preview is not available for this format.",
+                                color = Paper.Muted,
+                            )
+                        }
+                }
             }
         }
     }
