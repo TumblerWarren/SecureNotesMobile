@@ -96,7 +96,10 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (BuildConfig.DEBUG)
+            if (
+                context.applicationInfo.flags and
+                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+            )
                 android.util.Log.w(
                     "VaultMedia",
                     "Setup failed: ${e.javaClass.name}\n" +

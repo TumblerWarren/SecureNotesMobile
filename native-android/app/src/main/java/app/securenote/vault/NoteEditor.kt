@@ -532,6 +532,7 @@ private fun TableBlock(
         val minCellWidth =
             104.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.75f)
         val cellWidth = (maxWidth / table.columns.coerceAtMost(3)).coerceAtLeast(minCellWidth)
+        val hasOverflow = cellWidth * table.columns > maxWidth
         Column {
             Column(Modifier.fillMaxWidth().horizontalScroll(horizontal)) {
                 table.rows.forEachIndexed { rowIndex, row ->
@@ -590,7 +591,7 @@ private fun TableBlock(
                         horizontal.animateScrollTo(horizontal.maxValue)
                     }
                 }
-                if (cellWidth * table.columns > maxWidth)
+                if (hasOverflow)
                     Text(
                         "Swipe for columns",
                         style = MaterialTheme.typography.labelSmall,

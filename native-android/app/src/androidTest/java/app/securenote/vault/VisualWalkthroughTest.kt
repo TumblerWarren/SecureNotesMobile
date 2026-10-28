@@ -67,6 +67,7 @@ class VisualWalkthroughTest {
         instrumentation.runOnMainSync {
             // Match MainActivity's layout-affecting window settings; only screenshot blocking
             // differs because this Activity displays synthetic fixtures exclusively.
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(rule.activity.window, false)
             rule.activity.window.setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             )
@@ -386,6 +387,7 @@ class VisualWalkthroughTest {
                     .onNodeWithText("New password", substring = false)
                     .performScrollTo()
                     .performClick()
+                    .assertIsFocused()
                 save("recovery-keyboard")
             }
         } finally {

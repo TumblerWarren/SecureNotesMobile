@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
             )
         else registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
