@@ -128,7 +128,7 @@ class VisualWalkthroughTest {
                 rule.onAllNodes(isToggleable()).onFirst().performClick()
                 rule.onNodeWithTag("vault-library").performScrollToIndex(0)
                 save("selection")
-                rule.onNodeWithText("Move", substring = false).performScrollTo().performClick()
+                rule.onNodeWithText("Move", substring = false).performClick()
                 save("move-picker")
             }
             step("group-by-type") {
@@ -140,6 +140,7 @@ class VisualWalkthroughTest {
                 }
                 rule.onAllNodes(isToggleable()).onFirst().performClick()
                 rule.onNodeWithTag("vault-library").performScrollToIndex(0)
+                rule.onNodeWithText("More", substring = false).performClick()
                 rule.onNodeWithText("By type", substring = false).performScrollTo().performClick()
                 save("group-confirmation")
             }
@@ -196,6 +197,7 @@ class VisualWalkthroughTest {
             step("new-folder") {
                 home()
                 rule.onNodeWithTag("nav-folders").performClick()
+                rule.onNodeWithContentDescription("Sort", substring = false).performClick()
                 rule.onNodeWithText("New folder", substring = false).performClick()
                 save("new-folder")
             }
@@ -227,10 +229,10 @@ class VisualWalkthroughTest {
             }
             step("table") {
                 open(ids.getValue("table"))
-                waitText("Add row")
+                waitDescription("Add row")
                 save("table")
                 rule
-                    .onNodeWithText("Add column", substring = false)
+                    .onNodeWithContentDescription("Add column", substring = false)
                     .performScrollTo()
                     .performClick()
                 save("table-wide")
@@ -251,8 +253,13 @@ class VisualWalkthroughTest {
                         400,
                     )
                 }
+                rule
+                    .onAllNodesWithText("Stroke limit reached", substring = true)
+                    .assertCountEquals(0)
                 save("drawing-stroke")
-                rule.onNodeWithText("Color & stroke", substring = false).performClick()
+                rule
+                    .onNodeWithContentDescription("Color & stroke", substring = false)
+                    .performClick()
                 save("drawing-properties")
             }
             step("pdf") {
@@ -263,7 +270,7 @@ class VisualWalkthroughTest {
                 save("pdf-next-page")
                 rule.onNodeWithContentDescription("Pages", substring = false).performClick()
                 save("pdf-thumbnails")
-                rule.onNodeWithText("Close", substring = false).performClick()
+                rule.onNodeWithContentDescription("Close", substring = false).performClick()
                 rule.onNodeWithContentDescription("Go to page", substring = true).performClick()
                 save("pdf-jump")
             }
@@ -283,23 +290,23 @@ class VisualWalkthroughTest {
                     )
                     .onFirst()
                     .performClick()
-                waitText("Fit width")
+                waitDescription("Fit width")
                 save("pdf-zoom")
-                rule.onNodeWithText("Zoom in", substring = false).performClick()
+                rule.onNodeWithContentDescription("Zoom in", substring = false).performClick()
                 save("pdf-zoomed")
             }
             step("image") {
                 open(ids.getValue("image"))
-                waitText("Fit")
+                waitDescription("Fit")
                 save("image")
-                rule.onNodeWithText("Zoom in", substring = false).performClick()
+                rule.onNodeWithContentDescription("Zoom in", substring = false).performClick()
                 save("image-zoom")
             }
             step("epub") {
                 open(ids.getValue("epub"))
                 waitTag("epub-content")
                 save("epub-reading")
-                rule.onNodeWithText("Contents", substring = false).performClick()
+                rule.onNodeWithContentDescription("Contents", substring = false).performClick()
                 save("epub-contents")
             }
             step("text") {
@@ -311,11 +318,10 @@ class VisualWalkthroughTest {
                 open(ids.getValue("audio"))
                 Thread.sleep(1200)
                 save("audio-player")
-                rule.runOnIdle {
-                    rule.activity
-                        .findViewById<View>(androidx.media3.ui.R.id.exo_play_pause)
-                        .performClick()
-                }
+                rule
+                    .onNodeWithContentDescription("Play", substring = false)
+                    .performScrollTo()
+                    .performClick()
                 Thread.sleep(1000)
                 save("audio-playing")
             }
@@ -323,11 +329,10 @@ class VisualWalkthroughTest {
                 open(ids.getValue("video"))
                 Thread.sleep(1200)
                 save("video-player")
-                rule.runOnIdle {
-                    rule.activity
-                        .findViewById<View>(androidx.media3.ui.R.id.exo_play_pause)
-                        .performClick()
-                }
+                rule
+                    .onNodeWithContentDescription("Play", substring = false)
+                    .performScrollTo()
+                    .performClick()
                 Thread.sleep(1000)
                 save("video-playing")
             }
@@ -422,8 +427,10 @@ class VisualWalkthroughTest {
         rule.waitForIdle()
     }
 
-    private fun tool(text: String, description: String = text) =
-        if (
+    private fun tool(text: String, description: String = text): SemanticsNodeInteraction {
+        if (text in listOf("Select", "Grid view", "List view"))
+            rule.onNodeWithContentDescription("Sort", substring = false).performClick()
+        return if (
             rule
                 .onAllNodesWithContentDescription(description, substring = false)
                 .fetchSemanticsNodes()
@@ -431,6 +438,7 @@ class VisualWalkthroughTest {
         )
             rule.onNodeWithContentDescription(description, substring = false)
         else rule.onNodeWithText(text, substring = false)
+    }
 
     private fun waitTag(tag: String) =
         rule.waitUntil(15000) { rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }

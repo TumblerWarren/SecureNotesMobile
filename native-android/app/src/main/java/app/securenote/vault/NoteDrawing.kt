@@ -2,16 +2,18 @@ package app.securenote.vault
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -291,7 +294,9 @@ internal fun DrawingBlock(
     var expanded by remember(block.id) { mutableStateOf(false) }
     if (!expanded) {
         Column {
-            DrawingPreview(drawing)
+            Box(Modifier.fillMaxWidth().heightIn(max = 220.dp).clipToBounds()) {
+                DrawingPreview(drawing)
+            }
             TextButton({ expanded = true }) { Text("Edit drawing") }
         }
         return
@@ -307,14 +312,6 @@ internal fun DrawingBlock(
     ) {
         Surface(Modifier.fillMaxSize(), color = Paper.Background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Drawing",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton({ expanded = false }) { Text("Done") }
-                }
                 val current = remember(block.id) { LiveDrawingStroke() }
                 var color by remember(block.id) { mutableIntStateOf(android.graphics.Color.BLACK) }
                 var thickness by remember(block.id) { mutableFloatStateOf(4f) }
@@ -338,166 +335,30 @@ internal fun DrawingBlock(
                 val strokes = drawing.strokes
                 val pathCache = remember { StrokePathCache() }
                 val paths = remember(strokes, dimensions) { pathCache.resolve(strokes, dimensions) }
-                Row {
-                    TextButton({ properties = !properties }) {
-                        Text(if (properties) "Hide properties" else "Color & stroke")
-                    }
-                    TextButton({ if (drawing.undo()) save() }, enabled = drawing.canUndo) {
-                        Text("Undo")
-                    }
-                    TextButton({ if (drawing.redo()) save() }, enabled = drawing.canRedo) {
-                        Text("Redo")
-                    }
-                }
-                if (properties)
-                    Row(Modifier.horizontalScroll(rememberScrollState())) {
-                        listOf(
-                                "Black" to android.graphics.Color.BLACK,
-                                "Red" to android.graphics.Color.RED,
-                                "Blue" to android.graphics.Color.BLUE,
-                                "Green" to android.graphics.Color.rgb(0, 130, 80),
-                            )
-                            .forEach { (name, value) ->
-                                TextButton(
-                                    {
-                                        color = value
-                                        erasing = false
-                                        navigating = false
-                                    },
-                                    modifier =
-                                        Modifier.semantics {
-                                            contentDescription = "$name pen"
-                                        },
-                                ) {
-                                    Text(
-                                        if (color == value && !erasing) "●" else "○",
-                                        color = Color(value),
-                                    )
-                                }
-                            }
-                        TextButton({ customColor = true }) { Text("Custom color") }
-                        TextButton({ if (drawing.redo()) save() }, enabled = drawing.canRedo) {
-                            Text("Redo")
-                        }
-                        TextButton({
-                            erasing = !erasing
-                            navigating = false
-                        }) {
-                            Text(if (erasing) "Eraser on" else "Eraser")
-                        }
-                        TextButton({ if (drawing.undo()) save() }, enabled = drawing.canUndo) {
-                            Text("Undo")
-                        }
-                        TextButton(
-                            {
-                                val before = drawing.strokes
-                                drawing.strokes = emptyList()
-                                if (drawing.commit(before)) save()
-                            },
-                            enabled = drawing.strokes.isNotEmpty(),
-                        ) {
-                            Text("Clear")
-                        }
-                    }
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    TextButton({
-                        erasing = !erasing
-                        navigating = false
-                    }) {
-                        Text(if (erasing) "✓ Eraser" else "Eraser")
-                    }
-                    listOf("Pen", "Highlighter", "Line").forEach { name ->
-                        TextButton({
-                            tool = name
-                            erasing = false
-                            navigating = false
-                            opacity = if (name == "Highlighter") 0.3f else 1f
-                        }) {
-                            Text(if (tool == name && !erasing && !navigating) "✓ $name" else name)
-                        }
-                    }
-                    TextButton({
-                        navigating = !navigating
-                        erasing = false
-                    }) {
-                        Text(if (navigating) "Navigate ✓" else "Navigate")
-                    }
-                    TextButton({
-                        zoom = 1f
-                        pan = Offset.Zero
-                    }) {
-                        Text("Fit")
-                    }
-                    listOf("Blank", "Lined", "Grid", "Dots").forEach { name ->
-                        TextButton({
-                            drawing.paper = name
-                            save()
-                        }) {
-                            Text(if (drawing.paper == name) "✓ $name" else name)
-                        }
-                    }
-                }
-                if (customColor)
-                    AlertDialog(
-                        modifier = Modifier.secureEditing(),
-                        onDismissRequest = {
-                            customColor = false
-                            hex = ""
-                        },
-                        title = { Text("Pen color") },
-                        text = {
-                            OutlinedTextField(
-                                hex,
-                                { hex = it.take(7) },
-                                label = { Text("#RRGGBB") },
-                                singleLine = true,
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                {
-                                    color = android.graphics.Color.parseColor(hex)
-                                    erasing = false
-                                    customColor = false
-                                    navigating = false
-                                    hex = ""
-                                },
-                                enabled = hex.matches(Regex("#[0-9a-fA-F]{6}")),
-                            ) {
-                                Text("Apply")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton({
-                                customColor = false
-                                hex = ""
-                            }) {
-                                Text("Cancel")
-                            }
-                        },
-                    )
-                if (properties) {
-                    Text("Width ${thickness.toInt()}", style = MaterialTheme.typography.labelSmall)
-                    Slider(
-                        thickness,
-                        { thickness = it },
-                        valueRange = 1f..12f,
-                        modifier = Modifier.semantics { contentDescription = "Pen width" },
-                    )
+                var options by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Opacity ${(opacity*100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
+                        "Drawing",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    Slider(opacity, { opacity = it }, valueRange = 0.1f..1f)
+                    PaperAction("Undo", PaperGlyph.Undo, enabled = drawing.canUndo) {
+                        if (drawing.undo()) save()
+                    }
+                    PaperAction("Redo", PaperGlyph.Redo, enabled = drawing.canRedo) {
+                        if (drawing.redo()) save()
+                    }
+                    PaperAction("Drawing options", PaperGlyph.More) { options = true }
+                    PaperAction("Done", PaperGlyph.Check) { expanded = false }
                 }
-                Text(
-                    if (navigating) "Pinch to zoom · drag to pan"
-                    else "Draw with one finger · choose Navigate to zoom",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (notice.isNotEmpty()) Text(notice, color = MaterialTheme.colorScheme.error)
-                Box(
-                    Modifier.weight(1f).fillMaxWidth().clipToBounds(),
+                BoxWithConstraints(
+                    Modifier.weight(1f)
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                        .background(Color.White)
+                        .clipToBounds(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Canvas(
@@ -516,7 +377,13 @@ internal fun DrawingBlock(
                                 if (navigating)
                                     detectTransformGestures { _, delta, scale, _ ->
                                         val next = (zoom * scale).coerceIn(1f, 8f)
-                                        pan += delta * zoom
+                                        val limitX = dimensions.width * (next - 1) / 2
+                                        val limitY = dimensions.height * (next - 1) / 2
+                                        pan =
+                                            Offset(
+                                                (pan.x + delta.x).coerceIn(-limitX, limitX),
+                                                (pan.y + delta.y).coerceIn(-limitY, limitY),
+                                            )
                                         zoom = next
                                     }
                             }
@@ -536,6 +403,7 @@ internal fun DrawingBlock(
                                     if (session.closed || size.width == 0 || size.height == 0)
                                         return@awaitEachGesture
                                     down.consume()
+                                    notice = ""
                                     val before = drawing.strokes
                                     fun normalized(p: Offset) =
                                         Offset(
@@ -555,21 +423,18 @@ internal fun DrawingBlock(
                                                             it.width * dimensions.width / 720f,
                                                     )
                                                 }
-                                        else if (
-                                            current.size < NoteDrawing.MAX_STROKE_POINTS &&
-                                                (current.isEmpty() ||
-                                                    Offset(
-                                                            (point.x - current.last().x) *
-                                                                size.width,
-                                                            (point.y - current.last().y) *
-                                                                size.height,
-                                                        )
-                                                        .getDistanceSquared() >= density * density)
-                                        )
-                                            current.add(point, dimensions, tool == "Line")
-                                        else if (!erasing)
+                                        else if (current.size >= NoteDrawing.MAX_STROKE_POINTS) {
                                             notice =
                                                 "Stroke limit reached. Lift to start another stroke."
+                                        } else if (
+                                            (current.isEmpty() ||
+                                                Offset(
+                                                        (point.x - current.last().x) * size.width,
+                                                        (point.y - current.last().y) * size.height,
+                                                    )
+                                                    .getDistanceSquared() >= density * density)
+                                        )
+                                            current.add(point, dimensions, tool == "Line")
                                     }
                                     try {
                                         sample(down.position)
@@ -650,7 +515,265 @@ internal fun DrawingBlock(
                                     Stroke(thickness * size.width / 360f, cap = StrokeCap.Round),
                             )
                     }
+                    if (properties)
+                        Surface(
+                            Modifier.align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .heightIn(max = minOf(260.dp, maxHeight * .45f)),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            color = Paper.Background,
+                            tonalElevation = 3.dp,
+                        ) {
+                            Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        if (erasing) "Eraser" else tool,
+                                        Modifier.weight(1f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    PaperAction("Hide properties", PaperGlyph.Close) {
+                                        properties = false
+                                    }
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                ) {
+                                    listOf(
+                                            "Black" to android.graphics.Color.BLACK,
+                                            "Red" to android.graphics.Color.rgb(169, 81, 63),
+                                            "Green" to android.graphics.Color.rgb(47, 106, 76),
+                                            "Blue" to android.graphics.Color.rgb(49, 95, 145),
+                                        )
+                                        .forEach { (name, value) ->
+                                            IconButton(
+                                                {
+                                                    color = value
+                                                    erasing = false
+                                                    navigating = false
+                                                },
+                                                modifier =
+                                                    Modifier.semantics {
+                                                        contentDescription = "$name pen"
+                                                        selected = color == value && !erasing
+                                                    },
+                                            ) {
+                                                Box(
+                                                    Modifier.size(30.dp)
+                                                        .background(
+                                                            Color(value),
+                                                            androidx.compose.foundation.shape
+                                                                .RoundedCornerShape(10.dp),
+                                                        )
+                                                        .border(
+                                                            if (color == value) 2.dp else 0.dp,
+                                                            Paper.Accent,
+                                                            androidx.compose.foundation.shape
+                                                                .RoundedCornerShape(10.dp),
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    if (color == value)
+                                                        PaperIcon(
+                                                            PaperGlyph.Check,
+                                                            color = Color.White,
+                                                            modifier = Modifier.size(18.dp),
+                                                        )
+                                                }
+                                            }
+                                        }
+                                    PaperAction("Custom color", PaperGlyph.Add) {
+                                        customColor = true
+                                    }
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Width", style = MaterialTheme.typography.labelMedium)
+                                    Text(
+                                        "${thickness.toInt()} px",
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                                PaperSlider(
+                                    thickness,
+                                    { thickness = it },
+                                    range = 1f..12f,
+                                    modifier =
+                                        Modifier.height(36.dp).semantics {
+                                            contentDescription = "Pen width"
+                                        },
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Opacity", style = MaterialTheme.typography.labelMedium)
+                                    Text(
+                                        "${(opacity * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                                PaperSlider(
+                                    opacity,
+                                    { opacity = it },
+                                    range = .1f..1f,
+                                    modifier =
+                                        Modifier.height(36.dp).semantics {
+                                            contentDescription = "Pen opacity"
+                                        },
+                                )
+                            }
+                        }
                 }
+                if (notice.isNotEmpty())
+                    Text(
+                        notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                    )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.padding(horizontal = 8.dp)
+                            .size(24.dp)
+                            .background(
+                                Color(color),
+                                androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                            )
+                    )
+                    Text(
+                        "${thickness.toInt()} px",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    PaperAction("Fit", PaperGlyph.Fit) {
+                        zoom = 1f
+                        pan = Offset.Zero
+                    }
+                    PaperAction("Color & stroke", PaperGlyph.Sliders, selected = properties) {
+                        properties = !properties
+                    }
+                }
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                    color = Paper.Surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Paper.Line),
+                ) {
+                    Row(Modifier.fillMaxWidth()) {
+                        PaperAction(
+                            "Pen",
+                            PaperGlyph.Draw,
+                            Modifier.weight(1f),
+                            selected = tool == "Pen" && !erasing && !navigating,
+                        ) {
+                            tool = "Pen"
+                            erasing = false
+                            navigating = false
+                            opacity = 1f
+                        }
+                        PaperAction(
+                            "Highlighter",
+                            PaperGlyph.Marker,
+                            Modifier.weight(1f),
+                            selected = tool == "Highlighter" && !erasing && !navigating,
+                        ) {
+                            tool = "Highlighter"
+                            erasing = false
+                            navigating = false
+                            opacity = .3f
+                        }
+                        PaperAction(
+                            "Eraser",
+                            PaperGlyph.Eraser,
+                            Modifier.weight(1f),
+                            selected = erasing,
+                        ) {
+                            erasing = !erasing
+                            navigating = false
+                        }
+                        PaperAction(
+                            "Line",
+                            PaperGlyph.Line,
+                            Modifier.weight(1f),
+                            selected = tool == "Line" && !erasing && !navigating,
+                        ) {
+                            tool = "Line"
+                            erasing = false
+                            navigating = false
+                            opacity = 1f
+                        }
+                        PaperAction(
+                            "Navigate",
+                            PaperGlyph.Hand,
+                            Modifier.weight(1f),
+                            selected = navigating,
+                        ) {
+                            navigating = !navigating
+                            erasing = false
+                        }
+                    }
+                }
+                if (options)
+                    PaperSheet("Drawing options", { options = false }) {
+                        FlowRow {
+                            listOf("Blank", "Lined", "Grid", "Dots").forEach { name ->
+                                FilterChip(
+                                    selected = drawing.paper == name,
+                                    onClick = {
+                                        drawing.paper = name
+                                        save()
+                                        options = false
+                                    },
+                                    label = { Text(name) },
+                                )
+                            }
+                        }
+                        TextButton(
+                            {
+                                val before = drawing.strokes
+                                drawing.strokes = emptyList()
+                                if (drawing.commit(before)) save()
+                                options = false
+                            },
+                            enabled = drawing.strokes.isNotEmpty(),
+                        ) {
+                            PaperIcon(PaperGlyph.Trash)
+                            Text("Clear", Modifier.padding(start = 8.dp))
+                        }
+                    }
+                if (customColor)
+                    PaperSheet(
+                        "Pen color",
+                        { customColor = false },
+                        footer = {
+                            Button(
+                                {
+                                    color = android.graphics.Color.parseColor(hex)
+                                    erasing = false
+                                    navigating = false
+                                    customColor = false
+                                    hex = ""
+                                },
+                                Modifier.fillMaxWidth(),
+                                enabled = hex.matches(Regex("#[0-9a-fA-F]{6}")),
+                            ) {
+                                Text("Apply")
+                            }
+                        },
+                    ) {
+                        OutlinedTextField(
+                            hex,
+                            { hex = it.take(7) },
+                            label = { Text("#RRGGBB") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().secureEditing(),
+                        )
+                    }
             }
         }
     }

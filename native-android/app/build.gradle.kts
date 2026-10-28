@@ -13,8 +13,8 @@ android {
         applicationId = "com.anonymous.SecureNotesMobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0.0-dev"
+        versionCode = 3
+        versionName = "2.0.0-paper"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON" } }

@@ -15,10 +15,9 @@ import android.text.style.URLSpan
 import android.view.View
 import android.widget.TextView
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -49,7 +48,7 @@ internal class EpubTextView(context: Context) : TextView(context) {
         setTextColor(AndroidColor.rgb(39, 43, 40))
         setLinkTextColor(AndroidColor.rgb(169, 81, 63))
         typeface = Typeface.create("serif", Typeface.NORMAL)
-        setLineSpacing(6 * resources.displayMetrics.density, 1.15f)
+        setLineSpacing(3 * resources.displayMetrics.density, 1.12f)
         setPadding(0, 0, 0, 0)
         setTextIsSelectable(false)
         isLongClickable = false
@@ -95,7 +94,7 @@ internal class EpubTextView(context: Context) : TextView(context) {
         val content =
             Html.fromHtml(
                 frame.html,
-                Html.FROM_HTML_MODE_LEGACY,
+                Html.FROM_HTML_MODE_COMPACT,
                 Html.ImageGetter { name ->
                     val bitmap = frame.images[name]
                     if (bitmap == null)
@@ -293,9 +292,7 @@ internal fun EpubViewer(model: VaultModel, id: String) {
                 { contents = true },
                 enabled = catalog != null && !loading && failure.isEmpty(),
             ) {
-                PaperIcon(PaperGlyph.List)
-                Spacer(Modifier.width(6.dp))
-                Text("Contents")
+                PaperIcon(PaperGlyph.List, "Contents")
             }
             Spacer(Modifier.width(8.dp))
             TextButton(
@@ -388,29 +385,50 @@ internal fun EpubViewer(model: VaultModel, id: String) {
         }
     }
     if (contents)
-        AlertDialog(
-            modifier = Modifier.secureEditing(),
-            onDismissRequest = { contents = false },
-            title = { Text("Contents", style = MaterialTheme.typography.headlineSmall) },
-            text = {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
-                    itemsIndexed(catalog?.chapters.orEmpty()) { index, label ->
-                        TextButton(
-                            {
+        PaperSheet("Chapters", { contents = false }) {
+            catalog?.chapters.orEmpty().forEachIndexed { index, label ->
+                val active = index == frame?.chapter
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = if (active) Paper.AccentSoft else Paper.Background,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable {
                                 contents = false
                                 navigate { client.go(index) }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                "${index + 1}. $label",
-                                modifier = Modifier.fillMaxWidth(),
-                                color = if (index == frame?.chapter) Paper.Accent else Paper.Ink,
+                            }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (active)
+                            PaperIcon(
+                                PaperGlyph.Play,
+                                modifier = Modifier.size(16.dp),
+                                color = Paper.Accent,
                             )
-                        }
+                        Text(
+                            "${index + 1}",
+                            Modifier.padding(horizontal = 12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            label,
+                            Modifier.weight(1f),
+                            maxLines = 2,
+                            style = MaterialTheme.typography.bodyMedium,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        if (active)
+                            PaperIcon(
+                                PaperGlyph.Check,
+                                modifier = Modifier.size(16.dp),
+                                color = Paper.Accent,
+                            )
                     }
                 }
-            },
-            confirmButton = { TextButton({ contents = false }) { Text("Close") } },
-        )
+                Spacer(Modifier.height(4.dp))
+            }
+        }
 }

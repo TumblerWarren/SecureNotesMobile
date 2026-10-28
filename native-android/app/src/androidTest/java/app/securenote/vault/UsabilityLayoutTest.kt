@@ -53,15 +53,18 @@ class UsabilityLayoutTest {
                 }
             }
         }
-        rule.onNodeWithText("Bold", substring = false).assertIsSelected().assertIsDisplayed()
         rule
-            .onNodeWithText("Italic −", substring = false)
+            .onNodeWithContentDescription("Bold", substring = false)
+            .assertIsSelected()
+            .assertIsDisplayed()
+        rule
+            .onNodeWithContentDescription("Italic", substring = false)
             .assert(
                 SemanticsMatcher.expectValue(
                     androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
                     "Mixed",
                 )
             )
-        rule.onNodeWithText("Underline", substring = false).assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Underline", substring = false).assertIsNotEnabled()
     }
 }

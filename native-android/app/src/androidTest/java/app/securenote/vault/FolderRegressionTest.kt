@@ -3,6 +3,7 @@ package app.securenote.vault
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -105,6 +106,60 @@ class FolderRegressionTest {
             } finally {
                 edit.dispose()
             }
+        }
+    }
+
+    @Test
+    fun mediaQueueStaysInFolderAndDynamicSourceRejectsExternalUris() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = "test-media-queue-${UUID.randomUUID()}"
+        val store = VaultStore(context, directory)
+        try {
+            store.create("Synthetic media queue password".toByteArray()).fill(0)
+            store.dao.saveFolder(VaultFolder("a", null, "Music", "music"))
+            store.dao.saveFolder(VaultFolder("b", null, "Other", "other"))
+            val bytes = byteArrayOf(10, 20, 30, 40, 50, 60)
+            val selected = store.importStream("one.wav", "audio/wav", bytes.inputStream(), "a")
+            store.importStream("outside.wav", "audio/wav", bytes.inputStream(), "b")
+            store.importStream("movie.mp4", "video/mp4", bytes.inputStream(), "a")
+            assertEquals(listOf(selected), store.dao.mediaSiblings(selected, true).map { it.id })
+            val source = VaultMediaSource(store)
+            try {
+                assertEquals(
+                    3L,
+                    source.open(
+                        androidx.media3.datasource.DataSpec.Builder()
+                            .setUri("vault://$selected")
+                            .setPosition(2)
+                            .setLength(3)
+                            .build()
+                    ),
+                )
+                val actual = ByteArray(3)
+                assertEquals(3, source.read(actual, 0, 3))
+                assertArrayEquals(byteArrayOf(30, 40, 50), actual)
+            } finally {
+                source.close()
+            }
+            val external = VaultMediaSource(store)
+            try {
+                val rejected = runCatching {
+                    external.open(
+                        androidx.media3.datasource.DataSpec.Builder()
+                            .setUri("https://example.invalid/file.mp4")
+                            .build()
+                    )
+                }.exceptionOrNull()
+                assertTrue(rejected is IllegalArgumentException)
+            } finally {
+                external.close()
+            }
+            val summary = store.dao.folderSummaries(null).first().first { it.folder.id == "a" }
+            assertEquals(2, summary.fileCount)
+            assertEquals(12L, summary.totalSize)
+        } finally {
+            store.close()
+            File(context.noBackupFilesDir, directory).deleteRecursively()
         }
     }
 }

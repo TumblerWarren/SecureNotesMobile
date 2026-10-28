@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -36,11 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
-import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.*
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.PlayerView
 import app.securenote.vault.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -107,6 +104,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 internal fun VaultApp(model: VaultModel) {
     val navigationLabels = LocalDensity.current.fontScale <= 1.3f
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    var selectingFiles by remember { mutableStateOf(false) }
     val open by model.unlocked.collectAsState()
     val busy by model.busy.collectAsState()
     val libraryState = key(open) { rememberLazyGridState() }
@@ -181,7 +180,7 @@ internal fun VaultApp(model: VaultModel) {
             .semantics { testTagsAsResourceId = true }
             .secureEditing()
     ) {
-        if (!open || recovery != null || selected == null) {
+        if (!open || recovery != null) {
             Row(
                 Modifier.fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -254,8 +253,8 @@ internal fun VaultApp(model: VaultModel) {
                     Modifier.weight(1f)
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     LockScreen(model, busy)
                 }
@@ -313,151 +312,122 @@ internal fun VaultApp(model: VaultModel) {
                 Box(Modifier.weight(1f).fillMaxWidth()) { ItemScreen(model, selected!!) }
             else -> {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    PaperLibrary(model, libraryState) { openAdd() }
-                    if (navigationLabels)
-                        FloatingActionButton(
-                            { openAdd() },
-                            containerColor = Paper.Accent,
-                            contentColor = Color.White,
-                            shape = RoundedCornerShape(28.dp),
-                            modifier =
-                                Modifier.align(Alignment.BottomEnd)
-                                    .padding(24.dp)
-                                    .testTag("add-item"),
-                        ) {
-                            PaperIcon(PaperGlyph.Add, "Add")
-                        }
+                    PaperLibrary(model, libraryState, { selectingFiles = it }) { openAdd() }
                 }
-                if (!navigationLabels)
-                    Button(
-                        { openAdd() },
-                        modifier =
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("add-item"),
+                if (!imeVisible && !selectingFiles) {
+                    HorizontalDivider(color = Paper.Line)
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(Paper.Background)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        PaperIcon(PaperGlyph.Add)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add item")
-                    }
-                HorizontalDivider(color = Paper.Line)
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(Paper.Background)
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    listOf(
-                            Triple("all", "Vault", PaperGlyph.Shield),
-                            Triple("notes", "Notes", PaperGlyph.Note),
-                            Triple("folders", "Folders", PaperGlyph.Vault),
-                            Triple("settings", "Settings", PaperGlyph.Settings),
-                        )
-                        .forEach { (key, label, glyph) ->
-                            val active =
-                                if (key == "all")
-                                    !model.folderBrowsing.collectAsState().value &&
-                                        category == "all"
-                                else if (key == "folders")
-                                    model.folderBrowsing.collectAsState().value
-                                else category == key
-                            TextButton(
-                                {
-                                    if (key == "settings") settings = true
-                                    else if (key == "folders") model.openFolder(null)
-                                    else {
-                                        model.folderBrowsing.value = false
-                                        model.showLibrary(key)
-                                    }
-                                },
-                                modifier =
-                                    Modifier.weight(1f).testTag("nav-$key").semantics {
-                                        this.selected = active
-                                        contentDescription = label
+                        listOf(
+                                Triple("all", "Vault", PaperGlyph.Shield),
+                                Triple("notes", "Notes", PaperGlyph.Note),
+                                Triple("folders", "Folders", PaperGlyph.Vault),
+                                Triple("settings", "Settings", PaperGlyph.Settings),
+                            )
+                            .forEach { (key, label, glyph) ->
+                                val active =
+                                    if (key == "all")
+                                        !model.folderBrowsing.collectAsState().value &&
+                                            category == "all"
+                                    else if (key == "folders")
+                                        model.folderBrowsing.collectAsState().value
+                                    else category == key
+                                TextButton(
+                                    {
+                                        if (key == "settings") settings = true
+                                        else if (key == "folders") model.openFolder(null)
+                                        else {
+                                            model.folderBrowsing.value = false
+                                            model.showLibrary(key)
+                                        }
                                     },
-                                contentPadding = PaddingValues(vertical = 8.dp, horizontal = 0.dp),
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier =
+                                        Modifier.weight(1f).testTag("nav-$key").semantics {
+                                            this.selected = active
+                                            contentDescription = label
+                                        },
+                                    contentPadding =
+                                        PaddingValues(vertical = 8.dp, horizontal = 0.dp),
                                 ) {
-                                    PaperIcon(
-                                        glyph,
-                                        color = if (active) Paper.Accent else Paper.Muted,
-                                    )
-                                    if (navigationLabels)
-                                        Text(
-                                            label,
-                                            color = if (active) Paper.Accent else Paper.Muted,
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Box(
+                                            Modifier.size(48.dp, 28.dp)
+                                                .background(
+                                                    if (active) Paper.AccentSoft
+                                                    else Color.Transparent,
+                                                    RoundedCornerShape(14.dp),
+                                                ),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            PaperIcon(
+                                                glyph,
+                                                color = if (active) Paper.Accent else Paper.Muted,
+                                            )
+                                        }
+                                        if (navigationLabels)
+                                            Text(
+                                                label,
+                                                color = if (active) Paper.Accent else Paper.Muted,
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                    }
                                 }
                             }
-                        }
+                    }
                 }
             }
         }
     }
     if (open && recovery == null) {
         if (adding)
-            AlertDialog(
-                modifier = Modifier.secureEditing(),
-                onDismissRequest = { adding = false },
-                title = {
-                    Text("Make room for something.", style = MaterialTheme.typography.headlineSmall)
-                },
-                text = {
-                    Column(
-                        Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TextButton(
-                            {
+            PaperSheet("Add item", { adding = false }) {
+                listOf(
+                        "New note" to PaperGlyph.Note,
+                        "Import files" to PaperGlyph.Import,
+                        "Import folder" to PaperGlyph.Vault,
+                    )
+                    .forEach { (label, icon) ->
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(
+                                enabled = !busy
+                            ) {
                                 adding = false
-                                model.newNote()
+                                when (label) {
+                                    "New note" -> model.newNote()
+                                    "Import files" -> {
+                                        model.prepareImport()
+                                        picker.launch(arrayOf("*/*"))
+                                    }
+                                    else -> {
+                                        model.prepareImport()
+                                        treePicker.launch(null)
+                                    }
+                                }
                             },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            PaperIcon(PaperGlyph.Note)
-                            Spacer(Modifier.width(12.dp))
-                            Text("New note", modifier = Modifier.weight(1f))
+                            PaperIcon(icon, modifier = Modifier.padding(12.dp))
+                            Text(
+                                label,
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                             PaperIcon(PaperGlyph.Next)
                         }
-                        HorizontalDivider(color = Paper.Line)
-                        TextButton(
-                            {
-                                adding = false
-                                model.prepareImport()
-                                picker.launch(arrayOf("*/*"))
-                            },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(16.dp),
-                        ) {
-                            PaperIcon(PaperGlyph.Import)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Import files", modifier = Modifier.weight(1f))
-                            PaperIcon(PaperGlyph.Next)
-                        }
-                        TextButton(
-                            {
-                                adding = false
-                                model.prepareImport()
-                                treePicker.launch(null)
-                            },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Import folder")
-                        }
-                        Text(
-                            "Imports create encrypted copies. Your originals stay where they are.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Paper.Muted,
-                        )
                     }
-                },
-                confirmButton = { TextButton({ adding = false }) { Text("Cancel") } },
-            )
+                Text(
+                    "Imports make encrypted copies. Originals stay at their source.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Paper.Muted,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
         if (settings)
             SettingsDialog(
                 model,
@@ -490,16 +460,10 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     val creating = !model.store.exists
-    Spacer(Modifier.height(16.dp))
-    Surface(color = Paper.AccentSoft, shape = RoundedCornerShape(16.dp)) {
-        Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-            PaperIcon(PaperGlyph.Lock, color = Paper.Accent, modifier = Modifier.size(28.dp))
-        }
-    }
     Text(
         if (recoveryMode) "A way back in."
         else if (creating) "A private place for everything." else "Welcome back.",
-        style = MaterialTheme.typography.headlineLarge,
+        style = MaterialTheme.typography.headlineSmall,
     )
     Text(
         if (recoveryMode) "Use your recovery key to choose a new password."
@@ -512,8 +476,9 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
         OutlinedTextField(
             secret,
             { secret = it },
-            label = { Text("Recovery key") },
-            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Recovery key", maxLines = 1) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().keepInputVisible(),
             visualTransformation = PasswordVisualTransformation(),
             enabled = !busy,
         )
@@ -522,7 +487,7 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
         { password = it },
         label = { Text(if (recoveryMode) "New password" else "Vault password") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag("vault-password"),
+        modifier = Modifier.fillMaxWidth().keepInputVisible().testTag("vault-password"),
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         enabled = !busy,
@@ -533,7 +498,7 @@ private fun LockScreen(model: VaultModel, busy: Boolean) {
             { confirmation = it },
             label = { Text("Confirm password") },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("vault-confirmation"),
+            modifier = Modifier.fillMaxWidth().keepInputVisible().testTag("vault-confirmation"),
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             enabled = !busy,
@@ -625,59 +590,63 @@ private fun ItemScreen(model: VaultModel, id: String) {
             failed = true
         }
     }
+    val density = LocalDensity.current
+    val compactKeyboard =
+        WindowInsets.ime.getBottom(density) > 0 &&
+            androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height /
+                density.density < 480
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp)
-                .heightIn(min = 52.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton({
-                focus.clearFocus()
-                keyboard?.hide()
-                model.back()
-            }) {
-                PaperIcon(PaperGlyph.Back, "Back")
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(
-                if (item?.mime == "application/x-securenote") "Notes" else item?.name.orEmpty(),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleSmall,
-            )
-            TextButton({
-                model.lock()
-                focus.clearFocus()
-                keyboard?.hide()
-            }) {
-                PaperIcon(PaperGlyph.Lock)
-                Spacer(Modifier.width(4.dp))
-                Text("Lock")
-            }
-            Box {
-                IconButton({ menu = true }, enabled = item != null) {
-                    PaperIcon(PaperGlyph.More, "Item options")
+        if (!compactKeyboard)
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .heightIn(min = 52.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PaperAction("Back", PaperGlyph.Back) {
+                    focus.clearFocus()
+                    keyboard?.hide()
+                    model.back()
                 }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(if (item?.pinned == true) "Unpin" else "Pin") },
-                        onClick = {
-                            menu = false
-                            model.pin(id)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                        onClick = {
-                            menu = false
-                            deleting = true
-                        },
-                    )
+                Text(
+                    when {
+                        item?.mime == "application/x-securenote" -> "Notes"
+                        item?.mime?.startsWith("audio/") == true -> "Now playing"
+                        item?.mime?.startsWith("video/") == true -> "Video"
+                        else -> item?.name.orEmpty()
+                    },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                PaperAction("Lock", PaperGlyph.Lock) {
+                    model.lock()
+                    focus.clearFocus()
+                    keyboard?.hide()
+                }
+                Box {
+                    IconButton({ menu = true }, enabled = item != null) {
+                        PaperIcon(PaperGlyph.More, "Item options")
+                    }
+                    DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (item?.pinned == true) "Unpin" else "Pin") },
+                            onClick = {
+                                menu = false
+                                model.pin(id)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menu = false
+                                deleting = true
+                            },
+                        )
+                    }
                 }
             }
-        }
         HorizontalDivider(color = Paper.Line)
         if (failed) {
             Text("This item is unavailable.", modifier = Modifier.padding(24.dp))
@@ -698,13 +667,13 @@ private fun ItemScreen(model: VaultModel, id: String) {
                 value.mime == "application/x-securenote" -> NativeNoteEditor(model, value)
                 isEpubFile(value.mime, value.name) -> EpubViewer(model, id)
                 value.mime.startsWith("audio/") || value.mime.startsWith("video/") ->
-                    MediaViewer(model, id, value)
+                    SecureMediaViewer(model, id, value)
                 value.mime == "application/pdf" -> SecurePdfReader(model, id)
                 value.mime.startsWith("image/") -> ImageViewer(model, id)
                 value.mime.startsWith("text/") -> TextViewer(model, id)
                 else ->
                     Column(
-                        Modifier.fillMaxWidth().padding(32.dp),
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         PaperFileBadge(value.mime)
@@ -724,141 +693,6 @@ private fun ItemScreen(model: VaultModel, id: String) {
 }
 
 @Composable
-private fun MediaViewer(model: VaultModel, id: String, item: VaultItem) {
-    val context = LocalContext.current
-    var playbackError by remember(id) { mutableStateOf("") }
-    val player =
-        remember(id) {
-            val factory = DataSource.Factory { VaultMediaSource(model.store, id) }
-            ExoPlayer.Builder(context)
-                .setSeekBackIncrementMs(10000)
-                .setSeekForwardIncrementMs(10000)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
-                .setLoadControl(
-                    DefaultLoadControl.Builder()
-                        .setBufferDurationsMs(1000, 5000, 250, 500)
-                        .setTargetBufferBytes(24 * 1024 * 1024)
-                        .setPrioritizeTimeOverSizeThresholds(false)
-                        .build()
-                )
-                .build()
-                .apply {
-                    setMediaItem(MediaItem.fromUri("vault://$id"))
-                    prepare()
-                }
-        }
-    DisposableEffect(player) {
-        val listener =
-            object : androidx.media3.common.Player.Listener {
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    playbackError =
-                        "This media could not be played. Its format may be unsupported or the file may be damaged."
-                    model.playing = false
-                }
-
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    model.playing = isPlaying
-                }
-            }
-        player.addListener(listener)
-        var released = false
-        fun release() {
-            if (!released) {
-                released = true
-                model.playing = false
-                player.removeListener(listener)
-                player.stop()
-                player.clearVideoSurface()
-                player.release()
-            }
-        }
-        val unregister = model.onLock { release() }
-        onDispose {
-            unregister()
-            release()
-        }
-    }
-    val audio = item.mime.startsWith("audio/")
-    Column(
-        Modifier.fillMaxSize()
-            .then(if (audio) Modifier.verticalScroll(rememberScrollState()) else Modifier),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        if (audio) {
-            Spacer(Modifier.height(12.dp))
-            Surface(
-                color = Paper.Surface,
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, Paper.Line),
-            ) {
-                Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                    PaperIcon(
-                        PaperGlyph.Audio,
-                        color = Paper.Accent,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                item.name,
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(horizontal = 24.dp),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                "Audio · ${fileSize(item.size)} · On this device",
-                style = MaterialTheme.typography.bodySmall,
-                color = Paper.Muted,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-        }
-        if (playbackError.isNotEmpty())
-            Text(
-                playbackError,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(PaperSpacing.Screen),
-            )
-        AndroidView(
-            factory = {
-                (android.view.LayoutInflater.from(it).inflate(R.layout.paper_player, null, false)
-                        as PlayerView)
-                    .apply {
-                        this.player = player
-                        setShowNextButton(false)
-                        setShowPreviousButton(false)
-                        setBackgroundColor(android.graphics.Color.rgb(246, 241, 231))
-                        setShutterBackgroundColor(
-                            if (audio) android.graphics.Color.rgb(246, 241, 231)
-                            else android.graphics.Color.rgb(37, 40, 38)
-                        )
-                        controllerShowTimeoutMs = if (audio) 0 else 5000
-                        controllerHideOnTouch = !audio
-                        (videoSurfaceView as? SurfaceView)?.setSecure(true)
-                    }
-            },
-            modifier =
-                Modifier.fillMaxWidth()
-                    .then(
-                        if (audio)
-                            Modifier.height(
-                                (160 +
-                                        24 *
-                                            androidx.compose.ui.platform.LocalDensity.current
-                                                .fontScale)
-                                    .dp
-                            )
-                        else Modifier.weight(1f)
-                    )
-                    .testTag("native-media-player"),
-            onRelease = { it.player = null },
-        )
-    }
-}
-
-@Composable
 private fun ImageViewer(model: VaultModel, id: String) {
     val context = LocalContext.current
     var imageAttempt by remember(id) { mutableIntStateOf(0) }
@@ -872,18 +706,21 @@ private fun ImageViewer(model: VaultModel, id: String) {
         }
     }
     var state by remember(id) { mutableStateOf("loading") }
-    Box(Modifier.fillMaxSize()) {
+    var zoom by remember(id) { mutableIntStateOf(100) }
+    Box(Modifier.fillMaxSize().clipToBounds()) {
         key(view) {
             AndroidView(
                 factory = {
                     view.also {
                         it.onState = { state = it }
+                        it.onZoom = { zoom = it }
                         state = it.state
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().clipToBounds(),
                 onRelease = {
                     it.onState = null
+                    it.onZoom = null
                     it.close()
                 },
             )
@@ -902,10 +739,30 @@ private fun ImageViewer(model: VaultModel, id: String) {
                 )
             }
         if (state == "ready")
-            Row(Modifier.align(Alignment.BottomCenter).background(Paper.Background)) {
-                TextButton({ view.fitToScreen() }) { Text("Fit") }
-                TextButton({ view.changeZoom(1.5f) }) { Text("Zoom in") }
-                TextButton({ view.changeZoom(1 / 1.5f) }) { Text("Zoom out") }
+            Surface(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = Paper.Media.copy(alpha = .93f),
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PaperAction("Fit", PaperGlyph.Fit, dark = true) { view.fitToScreen() }
+                    PaperAction("Zoom out", PaperGlyph.Minus, dark = true) {
+                        view.changeZoom(1 / 1.5f)
+                    }
+                    Text(
+                        "$zoom%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                    PaperAction("Zoom in", PaperGlyph.Zoom, dark = true) { view.changeZoom(1.5f) }
+                    PaperAction("Rotate image", PaperGlyph.Rotate, dark = true) {
+                        view.rotateClockwise()
+                    }
+                }
             }
     }
 }

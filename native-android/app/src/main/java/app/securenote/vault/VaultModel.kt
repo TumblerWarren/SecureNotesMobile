@@ -643,6 +643,12 @@ class VaultModel internal constructor(app: Application, val store: VaultStore) :
         if (folderId.value == id) folderId.value = null
     }
 
+    fun deleteFiles(ids: List<String>) =
+        runWork("Delete files") {
+            ids.distinct().forEach { store.delete(it) }
+            drawingEncoders.clear()
+        }
+
     fun delete(id: String) = runWork {
         store.delete(id)
         drawingEncoders.clear()

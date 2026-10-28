@@ -39,6 +39,23 @@ class TiledImageView(
     private val destinationRect = RectF()
     @Volatile private var viewportRevision = 0L
     @Volatile private var fallback: Bitmap? = null
+    var onZoom: ((Int) -> Unit)? = null
+    val zoomPercent
+        get() = ((scale / fit.coerceAtLeast(.00001f)) * 100).roundToInt()
+
+    fun rotateClockwise() {
+        if (!ready) return
+        orientation.postRotate(90f)
+        val bounds = RectF(0f, 0f, imageWidth.toFloat(), imageHeight.toFloat())
+        orientation.mapRect(bounds)
+        orientation.postTranslate(-bounds.left, -bounds.top)
+        displayWidth = bounds.width()
+        displayHeight = bounds.height()
+        fitImage()
+        viewportRevision++
+        invalidate()
+    }
+
     var onState: ((String) -> Unit)? = null
     val state
         get() = if (failed) "error" else if (ready) "ready" else "loading"
@@ -156,6 +173,7 @@ class TiledImageView(
     }
 
     private fun clamp() {
+        onZoom?.invoke(zoomPercent)
         val w = displayWidth * scale
         val h = displayHeight * scale
         tx = if (w <= width) (width - w) / 2 else tx.coerceIn(width - w, 0f)
@@ -226,6 +244,16 @@ class TiledImageView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        val saved = canvas.save()
+        try {
+            canvas.clipRect(0, 0, width, height)
+            drawViewport(canvas)
+        } finally {
+            canvas.restoreToCount(saved)
+        }
+    }
+
+    private fun drawViewport(canvas: Canvas) {
         super.onDraw(canvas)
         if (closed.get()) return
         if (failed) {

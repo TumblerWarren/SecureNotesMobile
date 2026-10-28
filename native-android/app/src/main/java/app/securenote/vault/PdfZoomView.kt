@@ -121,6 +121,16 @@ internal class PdfZoomView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        val saved = canvas.save()
+        try {
+            canvas.clipRect(0, 0, width, height)
+            drawViewport(canvas)
+        } finally {
+            canvas.restoreToCount(saved)
+        }
+    }
+
+    private fun drawViewport(canvas: Canvas) {
         if (closed || width == 0) return
         val displayWidth = width * zoom
         canvas.drawBitmap(

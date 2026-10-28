@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -25,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
 
 private data class NoteLinkTarget(
     val edit: NoteEditText,
@@ -99,14 +99,14 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "title") {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicTextField(
                         title,
                         {
                             title = it.take(255)
                             model.renameNote(item.id, title)
                         },
-                        textStyle = MaterialTheme.typography.headlineLarge.copy(color = Paper.Ink),
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(color = Paper.Ink),
                         cursorBrush = SolidColor(Paper.Accent),
                         modifier =
                             Modifier.fillMaxWidth()
@@ -118,7 +118,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
                                 if (title.isEmpty())
                                     Text(
                                         "Untitled",
-                                        style = MaterialTheme.typography.headlineLarge,
+                                        style = MaterialTheme.typography.headlineMedium,
                                         color = Paper.Muted,
                                     )
                                 field()
@@ -244,8 +244,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
         Row(
             Modifier.fillMaxWidth()
                 .background(Paper.Surface)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val revision = toolRevision
@@ -255,6 +254,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             }
             PaperEditorTool(
                 "Bold",
+                modifier = Modifier.weight(1f),
                 letter = "B",
                 enabled = target() != null,
                 state = state("bold"),
@@ -263,6 +263,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             }
             PaperEditorTool(
                 "Italic",
+                modifier = Modifier.weight(1f),
                 letter = "I",
                 enabled = target() != null,
                 state = state("italic"),
@@ -271,6 +272,7 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             }
             PaperEditorTool(
                 "Underline",
+                modifier = Modifier.weight(1f),
                 letter = "U",
                 enabled = target() != null,
                 state = state("underline"),
@@ -280,13 +282,37 @@ fun NativeNoteEditor(model: VaultModel, item: VaultItem) {
             PaperEditorTool(
                 "List",
                 PaperGlyph.List,
+                modifier = Modifier.weight(1f),
                 enabled = target() != null,
                 state = state("list"),
             ) {
                 target()?.bullets()
             }
-            Box {
-                PaperEditorTool("Insert", PaperGlyph.Add, enabled = !busy) { insertMenu = true }
+            PaperEditorTool(
+                "Link",
+                PaperGlyph.Link,
+                modifier = Modifier.weight(1f),
+                enabled = target() != null,
+            ) {
+                target()?.let { edit ->
+                    linkTarget =
+                        NoteLinkTarget(
+                            edit,
+                            minOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
+                            maxOf(edit.selectionStart, edit.selectionEnd).coerceAtLeast(0),
+                            edit.revision,
+                        )
+                }
+            }
+            Box(Modifier.weight(1f)) {
+                PaperEditorTool(
+                    "Insert",
+                    PaperGlyph.Add,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
+                ) {
+                    insertMenu = true
+                }
                 DropdownMenu(insertMenu, { insertMenu = false }) {
                     listOf("Table", "Drawing", "Attachment", "Link", "Manage blocks").forEach {
                         label ->
@@ -383,52 +409,50 @@ internal fun PaperEditorTool(
     letter: String? = null,
     enabled: Boolean = true,
     state: FormatState = FormatState.Off,
+    modifier: Modifier = Modifier,
     action: () -> Unit,
 ) {
-    val showLabel = LocalDensity.current.fontScale <= 1.3f
     TextButton(
         action,
         enabled = enabled,
         modifier =
-            Modifier.widthIn(min = 48.dp).semantics {
-                if (!showLabel) contentDescription = label
+            modifier.heightIn(min = 48.dp).semantics {
+                contentDescription = label
                 selected = state == FormatState.On
                 stateDescription = if (!enabled) "Unavailable" else state.name
             },
         colors =
             ButtonDefaults.textButtonColors(
                 containerColor =
-                    if (state != FormatState.Off && enabled) Paper.AccentSoft else Color.Transparent
+                    if (enabled && state != FormatState.Off) Paper.AccentSoft else Color.Transparent
             ),
-        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(0.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (glyph != null)
-                PaperIcon(
-                    glyph,
-                    color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = 0.38f),
-                )
+        Box(contentAlignment = Alignment.Center) {
+            val color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = .4f)
+            if (glyph != null) PaperIcon(glyph, color = color)
             else
                 Text(
                     letter.orEmpty(),
                     fontFamily = FontFamily.Serif,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontStyle =
                         if (label == "Italic") androidx.compose.ui.text.font.FontStyle.Italic
                         else androidx.compose.ui.text.font.FontStyle.Normal,
                     fontWeight =
                         if (label == "Bold") androidx.compose.ui.text.font.FontWeight.Bold
                         else androidx.compose.ui.text.font.FontWeight.Normal,
-                    color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = 0.38f),
+                    textDecoration =
+                        if (label == "Underline")
+                            androidx.compose.ui.text.style.TextDecoration.Underline
+                        else null,
+                    color = color,
                 )
-            if (showLabel)
+            if (state == FormatState.Mixed)
                 Text(
-                    if (state == FormatState.Mixed) "$label −" else label,
+                    "−",
+                    Modifier.align(Alignment.BottomEnd),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (enabled) Paper.Muted else Paper.Muted.copy(alpha = 0.38f),
                 )
         }
     }
@@ -458,6 +482,7 @@ private fun RichTextBlock(
                 setTextColor(android.graphics.Color.rgb(39, 43, 40))
                 setHintTextColor(android.graphics.Color.rgb(115, 110, 101))
                 hint = "Write a note…"
+                includeFontPadding = false
                 minLines = 1
                 maxLines = 24
                 textSize = 18f
@@ -500,32 +525,75 @@ private fun TableBlock(
         table = next
         onEdit(next)
     }
-    Column(Modifier.horizontalScroll(rememberScrollState())) {
-        table.rows.forEachIndexed { rowIndex, row ->
-            Row {
-                row.forEachIndexed { col, value ->
-                    OutlinedTextField(
-                        value,
-                        { update(table.cell(rowIndex, col, it)) },
-                        modifier =
-                            Modifier.width(150.dp).secureEditing().onFocusChanged {
-                                if (it.isFocused) onFocus()
-                            },
-                        label = { Text("${rowIndex + 1}, ${col + 1}") },
-                        singleLine = false,
-                    )
+    val horizontal = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var focused by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cellWidth = (maxWidth / table.columns.coerceAtMost(3)).coerceAtLeast(104.dp)
+        Column {
+            Column(Modifier.fillMaxWidth().horizontalScroll(horizontal)) {
+                table.rows.forEachIndexed { rowIndex, row ->
+                    Row(Modifier.height(IntrinsicSize.Min)) {
+                        row.forEachIndexed { col, value ->
+                            val active = focused == (rowIndex to col)
+                            Box(
+                                Modifier.width(cellWidth)
+                                    .fillMaxHeight()
+                                    .background(if (rowIndex == 0) Paper.Inset else Paper.Surface)
+                                    .border(1.dp, if (active) Paper.Accent else Paper.Line)
+                            ) {
+                                BasicTextField(
+                                    value,
+                                    { update(table.cell(rowIndex, col, it)) },
+                                    textStyle =
+                                        MaterialTheme.typography.bodyMedium.copy(color = Paper.Ink),
+                                    cursorBrush = SolidColor(Paper.Accent),
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .padding(10.dp)
+                                            .secureEditing()
+                                            .semantics {
+                                                contentDescription =
+                                                    "Cell ${rowIndex + 1}, ${col + 1}"
+                                            }
+                                            .onFocusChanged {
+                                                if (it.isFocused) {
+                                                    focused = rowIndex to col
+                                                    onFocus()
+                                                }
+                                            },
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }
-        Row {
-            TextButton({ update(table.addRow()) }, enabled = table.rows.size < NoteTable.MAX_ROWS) {
-                Text("Add row")
-            }
-            TextButton(
-                { update(table.addColumn()) },
-                enabled = table.columns < NoteTable.MAX_COLUMNS,
-            ) {
-                Text("Add column")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                PaperAction(
+                    "Add row",
+                    PaperGlyph.RowAdd,
+                    enabled = table.rows.size < NoteTable.MAX_ROWS,
+                ) {
+                    update(table.addRow())
+                }
+                PaperAction(
+                    "Add column",
+                    PaperGlyph.ColumnAdd,
+                    enabled = table.columns < NoteTable.MAX_COLUMNS,
+                ) {
+                    update(table.addColumn())
+                    scope.launch {
+                        kotlinx.coroutines.delay(100)
+                        horizontal.animateScrollTo(horizontal.maxValue)
+                    }
+                }
+                if (table.columns > 2)
+                    Text(
+                        "Swipe for columns",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Paper.Muted,
+                    )
             }
         }
     }

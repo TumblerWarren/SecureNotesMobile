@@ -60,15 +60,25 @@ fun proxyDescriptor(
     }
 }
 
-class VaultMediaSource(private val store: VaultStore, private val itemId: String) :
+class VaultMediaSource(private val store: VaultStore, private val itemId: String? = null) :
     BaseDataSource(false) {
+    private var activeItem: String? = itemId
     private var reader: EncryptedObjects.Reader? = null
     private var position = 0L
     private var remaining = 0L
 
     override fun open(dataSpec: DataSpec): Long {
         transferInitializing(dataSpec)
-        val (item, r) = runBlocking { store.reader(itemId) }
+        val target =
+            itemId
+                ?: dataSpec.uri.let { uri ->
+                    require(uri.scheme == "vault") { "Only vault media can be played" }
+                    val id = requireNotNull(uri.host)
+                    require(id.matches(Regex("[0-9a-fA-F-]{36}"))) { "Invalid vault media" }
+                    id
+                }
+        activeItem = target
+        val (item, r) = runBlocking { store.reader(target) }
         reader = r
         position = dataSpec.position
         if (position > item.size) {
@@ -98,7 +108,7 @@ class VaultMediaSource(private val store: VaultStore, private val itemId: String
         return n
     }
 
-    override fun getUri(): Uri = Uri.parse("vault://$itemId")
+    override fun getUri(): Uri? = activeItem?.let { Uri.parse("vault://$it") }
 
     override fun close() {
         reader?.let {

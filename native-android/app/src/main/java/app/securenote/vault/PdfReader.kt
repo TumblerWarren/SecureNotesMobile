@@ -4,10 +4,13 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -150,26 +153,40 @@ internal fun SecurePdfReader(model: VaultModel, id: String) {
             dismissButton = { TextButton({ jump = false }) { Text("Cancel") } },
         )
     if (thumbnails)
-        AlertDialog(
-            onDismissRequest = { thumbnails = false },
-            title = { Text("Pages") },
-            text = {
-                LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                    items(count) { page ->
-                        Column(
-                            Modifier.clickable {
+        PaperSheet("Pages", { thumbnails = false }) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(96.dp),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .height(minOf(360, ((count + 2) / 3) * 170).dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(count) { page ->
+                    Column(
+                        Modifier.border(
+                                if (page == current) 2.dp else 1.dp,
+                                if (page == current) Paper.Accent else Paper.Line,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable {
                                 scope.launch { list.scrollToItem(page) }
                                 thumbnails = false
                             }
-                        ) {
-                            PdfPage(model, client, page, true)
-                            Text("Page ${page+1}", Modifier.padding(8.dp))
-                        }
+                            .padding(4.dp)
+                    ) {
+                        PdfPage(model, client, page, true)
+                        Text(
+                            "Page ${page+1}",
+                            Modifier.padding(4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
                     }
                 }
-            },
-            confirmButton = { TextButton({ thumbnails = false }) { Text("Close") } },
-        )
+            }
+        }
 }
 
 @Composable
@@ -233,12 +250,21 @@ private fun PdfPage(model: VaultModel, client: PdfClient, page: Int, thumbnail: 
             ) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                            TextButton({ zooming = false }) { Text("Done") }
-                            TextButton({ zoomView?.fit() }) { Text("Fit width") }
-                            TextButton({ zoomView?.zoomBy(1.5f) }) { Text("Zoom in") }
-                            TextButton({ zoomView?.zoomBy(1 / 1.5f) }) { Text("Zoom out") }
-                            TextButton({ model.lock() }) { Text("Lock") }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            PaperAction("Done", PaperGlyph.Back) { zooming = false }
+                            Text(
+                                "${page + 1}",
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                            )
+                            PaperAction("Fit width", PaperGlyph.Fit) { zoomView?.fit() }
+                            PaperAction("Zoom out", PaperGlyph.Minus) { zoomView?.zoomBy(1 / 1.5f) }
+                            PaperAction("Zoom in", PaperGlyph.Zoom) { zoomView?.zoomBy(1.5f) }
+                            PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
                         }
                         if (zoomError)
                             TextButton({
@@ -252,7 +278,7 @@ private fun PdfPage(model: VaultModel, client: PdfClient, page: Int, thumbnail: 
                                 PdfZoomView(it, client, page, bitmap) { zoomError = it }
                                     .also { zoomView = it }
                             },
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
                             onRelease = {
                                 it.close()
                                 zoomView = null

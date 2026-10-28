@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,9 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -24,8 +21,6 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 fun isEpubFile(mime: String, name: String = ""): Boolean =
     mime.substringBefore(';').trim().equals("application/epub+zip", true) ||
@@ -82,30 +77,43 @@ fun PaperFileBadge(mime: String, modifier: Modifier = Modifier, name: String = "
 }
 
 @Composable
-fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
-    val largeText = LocalDensity.current.fontScale > 1.3f
+fun PaperLibrary(
+    model: VaultModel,
+    state: LazyGridState,
+    onSelecting: (Boolean) -> Unit = {},
+    onAdd: () -> Unit,
+) {
     val query by model.query.collectAsState()
     val category by model.category.collectAsState()
-    val pages = model.pages.collectAsLazyPagingItems()
     val grid by model.useGrid.collectAsState()
     val order by model.sort.collectAsState()
-    var sorting by remember { mutableStateOf(false) }
-    var grouping by remember { mutableStateOf(false) }
-    val pinned = emptyList<ItemSummary>()
     val browsing by model.folderBrowsing.collectAsState()
     val parent by model.folderId.collectAsState()
-    var chosen by remember(parent, category, query) { mutableStateOf(setOf<String>()) }
-    var movingFiles by remember { mutableStateOf(false) }
-    var selecting by remember { mutableStateOf(false) }
-    var deleting by remember { mutableStateOf<ItemSummary?>(null) }
-    var lastFilter by remember { mutableStateOf(listOf(category, query, parent, order, grid)) }
-    LaunchedEffect(category, query, parent, order, grid) {
-        val next = listOf(category, query, parent, order, grid)
-        if (lastFilter != next) {
-            state.scrollToItem(0)
-            lastFilter = next
-        }
+    val busy by model.busy.collectAsState()
+    val pages = model.pages.collectAsLazyPagingItems()
+    val folders by
+        remember(parent) { model.store.dao.folderSummaries(parent) }.collectAsState(emptyList())
+    val jobs by remember { model.store.dao.importJobs() }.collectAsState(emptyList())
+    var folderName by remember(parent) { mutableStateOf("Folders") }
+    LaunchedEffect(parent) {
+        folderName = parent?.let { model.store.dao.folder(it)?.name } ?: "Folders"
     }
+    var selecting by remember { mutableStateOf(false) }
+    var chosen by remember(parent, category, query) { mutableStateOf(setOf<String>()) }
+    var sorting by remember { mutableStateOf(false) }
+    var types by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
+    var grouping by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<ItemSummary?>(null) }
+    var bulkDelete by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    val callback by rememberUpdatedState(onSelecting)
+    LaunchedEffect(selecting) { callback(selecting) }
+    DisposableEffect(Unit) { onDispose { callback(false) } }
+    LaunchedEffect(category, query, parent, order, grid) { state.scrollToItem(0) }
     val filters =
         listOf(
             "all" to "All",
@@ -117,398 +125,528 @@ fun PaperLibrary(model: VaultModel, state: LazyGridState, onAdd: () -> Unit) {
             "epub" to "EPUB",
             "documents" to "Files",
         )
-    LazyVerticalGrid(
-        columns = if (grid) GridCells.Adaptive(140.dp) else GridCells.Fixed(1),
-        state = state,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize().testTag("vault-library"),
-    ) {
-        item(key = "heading", span = { GridItemSpan(maxLineSpan) }) {
-            Column(Modifier.padding(top = 8.dp, bottom = 4.dp)) {
-                if (browsing) FolderPanel(model)
-                FlowRow {
-                    TextButton({
-                        selecting = !selecting
-                        chosen = emptySet()
-                    }) {
-                        if (largeText)
-                            PaperIcon(
-                                PaperGlyph.List,
-                                if (selecting) "Finish selecting" else "Select items",
-                            )
-                        else Text(if (selecting) "Done" else "Select")
-                    }
-                    TextButton({ model.toggleGrid() }) {
-                        if (largeText)
-                            PaperIcon(PaperGlyph.Table, if (grid) "List view" else "Grid view")
-                        else Text(if (grid) "List view" else "Grid view")
-                    }
-                    Box {
-                        TextButton({ sorting = true }) {
-                            if (largeText) PaperIcon(PaperGlyph.More, "Sort") else Text("Sort")
-                        }
-                        DropdownMenu(sorting, { sorting = false }) {
-                            listOf("modified" to "Modified", "name" to "Name", "size" to "Size")
-                                .forEach { (key, label) ->
+    val title =
+        if (browsing) folderName
+        else
+            filters.firstOrNull { it.first == category }?.second?.takeUnless { category == "all" }
+                ?: "Vault"
+    val visibleFolders =
+        if (browsing)
+            folders.filter { query.isBlank() || it.folder.name.contains(query, ignoreCase = true) }
+        else emptyList()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val short = maxHeight < 360.dp
+        @Composable
+        fun search(modifier: Modifier) {
+            OutlinedTextField(
+                query,
+                {
+                    model.query.value = it
+                    model.touch()
+                },
+                singleLine = true,
+                modifier = modifier.testTag("vault-search"),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                placeholder = {
+                    Text(
+                        if (browsing) "Search folder" else "Search vault",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                leadingIcon = { PaperIcon(PaperGlyph.Search) },
+                trailingIcon = {
+                    if (query.isNotEmpty())
+                        PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
+                    else
+                        Box {
+                            PaperAction("File types", PaperGlyph.Sliders) { types = true }
+                            DropdownMenu(types, { types = false }) {
+                                filters.forEach { (key, label) ->
                                     DropdownMenuItem(
-                                        text = { Text(if (key == order) "✓ $label" else label) },
+                                        text = { Text(label) },
                                         onClick = {
-                                            model.sort.value = key
-                                            sorting = false
+                                            model.showLibrary(key)
+                                            types = false
                                         },
                                     )
                                 }
-                        }
-                    }
-                }
-                if (chosen.isNotEmpty())
-                    FlowRow {
-                        Text("${chosen.size} selected", Modifier.padding(12.dp))
-                        TextButton({ movingFiles = true }) { Text("Move") }
-                        TextButton({ grouping = true }) { Text("By type") }
-                        TextButton({ chosen = emptySet() }) { Text("Clear") }
-                    }
-
-                if (!browsing)
-                    Text(
-                        when (category) {
-                            "notes" -> "Notes"
-                            "documents" -> "Files"
-                            "media" -> "Media"
-                            else -> if (browsing) "Folder contents" else "Vault"
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    if (pages.itemCount == 0) "On this device"
-                    else
-                        "${pages.itemCount} ${if (pages.itemCount == 1) "item" else "items"} · On this device",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Paper.Muted,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = {
-                        model.query.value = it
-                        model.touch()
-                    },
-                    modifier = Modifier.fillMaxWidth().testTag("vault-search"),
-                    placeholder = {
-                        Text(
-                            "Search your notes, files and media",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    },
-                    leadingIcon = { PaperIcon(PaperGlyph.Search) },
-                    trailingIcon =
-                        if (query.isNotEmpty()) {
-                            {
-                                IconButton({ model.query.value = "" }) {
-                                    PaperIcon(PaperGlyph.Close, "Clear search")
-                                }
                             }
-                        } else null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(30.dp),
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Paper.Inset,
-                            unfocusedContainerColor = Paper.Inset,
-                            focusedBorderColor = Paper.Accent,
-                            unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                        ),
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    filters.forEach { (key, label) ->
-                        Column(
-                            Modifier.widthIn(min = 72.dp)
-                                .selectable(
-                                    selected = category == key,
-                                    role = Role.Tab,
-                                    onClick = { model.showLibrary(key) },
-                                )
-                                .padding(top = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                label,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = if (category == key) Paper.Accent else Paper.Muted,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Box(
-                                Modifier.fillMaxWidth()
-                                    .height(2.dp)
-                                    .background(if (category == key) Paper.Accent else Paper.Line)
-                            )
                         }
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Paper.Inset,
+                        focusedContainerColor = Paper.Inset,
+                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                    ),
+            )
+        }
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selecting)
+                    PaperAction("Finish selecting", PaperGlyph.Close) {
+                        selecting = false
+                        chosen = emptySet()
+                    }
+                else if (browsing && parent != null)
+                    PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
+                Column(
+                    if (short && !selecting)
+                        Modifier.widthIn(max = 120.dp).padding(horizontal = 12.dp)
+                    else Modifier.weight(1f).padding(start = 12.dp)
+                ) {
+                    Text(
+                        if (selecting) "${chosen.size} selected" else title,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!short && !selecting)
+                        Text(
+                            "${pages.itemCount} items" +
+                                if (browsing && parent == null) " · Unfiled" else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Paper.Muted,
+                            maxLines = 1,
+                        )
+                }
+                if (short && !selecting) search(Modifier.weight(1f).padding(vertical = 4.dp))
+                if (!selecting) {
+                    PaperAction(
+                        "Add item",
+                        PaperGlyph.Add,
+                        Modifier.testTag("add-item"),
+                        enabled = !busy,
+                        action = onAdd,
+                    )
+                    PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
+                }
+                Box {
+                    PaperAction("Sort", PaperGlyph.More) { sorting = true }
+                    DropdownMenu(sorting, { sorting = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (selecting) "Done" else "Select") },
+                            onClick = {
+                                selecting = !selecting
+                                chosen = emptySet()
+                                sorting = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("New folder") },
+                            onClick = {
+                                creating = true
+                                sorting = false
+                            },
+                            leadingIcon = { PaperIcon(PaperGlyph.FolderAdd) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (grid) "List view" else "Grid view") },
+                            onClick = {
+                                model.toggleGrid()
+                                sorting = false
+                            },
+                            leadingIcon = {
+                                PaperIcon(if (grid) PaperGlyph.List else PaperGlyph.Grid)
+                            },
+                        )
+                        listOf("modified" to "Modified", "name" to "Name", "size" to "Size")
+                            .forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(if (key == order) "✓ $label" else label) },
+                                    onClick = {
+                                        model.sort.value = key
+                                        sorting = false
+                                    },
+                                )
+                            }
                     }
                 }
             }
-        }
-        if (pinned.isNotEmpty()) {
-            item(key = "pinned-label", span = { GridItemSpan(maxLineSpan) }) {
-                SectionLabel("Pinned", PaperGlyph.Pin)
+            if (!selecting && !short) {
+                if (browsing && parent != null)
+                    Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
+                search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                Row(
+                    Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    filters.forEach { (key, label) ->
+                        FilterChip(
+                            selected = category == key,
+                            onClick = { model.showLibrary(key) },
+                            label = { Text(label, maxLines = 1) },
+                            shape = RoundedCornerShape(14.dp),
+                        )
+                    }
+                }
             }
-            pinned.forEach { pinnedItem ->
-                item(key = "pinned/${pinnedItem.id}", span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .clickable { model.navigate(pinnedItem.id) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        PaperFileBadge(pinnedItem.mime, name = pinnedItem.name)
-                        Column(Modifier.weight(1f)) {
+            if (browsing && query.isNotBlank())
+                TextButton({
+                    model.folderBrowsing.value = false
+                    model.folderId.value = null
+                    model.showLibrary("all")
+                }) {
+                    Text("Search entire vault")
+                }
+            LazyVerticalGrid(
+                columns = if (grid) GridCells.Adaptive(152.dp) else GridCells.Fixed(1),
+                state = state,
+                modifier = Modifier.weight(1f).fillMaxWidth().testTag("vault-library"),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(
+                    visibleFolders,
+                    key = { "folder/${it.folder.id}" },
+                    span = { GridItemSpan(maxLineSpan) },
+                ) {
+                    FolderRow(model, it)
+                }
+                if (visibleFolders.isNotEmpty() && pages.itemCount > 0)
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            if (parent == null) "Unfiled" else "Files",
+                            Modifier.padding(top = 8.dp, bottom = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Paper.Muted,
+                        )
+                    }
+                items(count = pages.itemCount, key = { pages.peek(it)?.id ?: "placeholder/$it" }) {
+                    index ->
+                    val item = pages[index]
+                    if (item != null) {
+                        val checked = item.id in chosen
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .background(
+                                    if (checked) Paper.AccentSoft else Paper.Surface,
+                                    RoundedCornerShape(12.dp),
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (selecting)
+                                Checkbox(
+                                    checked,
+                                    { chosen = if (it) chosen + item.id else chosen - item.id },
+                                )
+                            Box(Modifier.weight(1f)) {
+                                VaultEntry(
+                                    model,
+                                    item,
+                                    grid,
+                                    selecting,
+                                    {
+                                        chosen = if (checked) chosen - item.id else chosen + item.id
+                                    },
+                                    { deleting = item },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (pages.loadState.refresh is LoadState.Loading)
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                if (
+                    pages.loadState.refresh is LoadState.Error ||
+                        pages.loadState.append is LoadState.Error
+                )
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        TextButton({ pages.retry() }) { Text("Try again") }
+                    }
+                if (
+                    pages.itemCount == 0 &&
+                        visibleFolders.isEmpty() &&
+                        pages.loadState.refresh is LoadState.NotLoading
+                )
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            PaperFileBadge("application/octet-stream")
                             Text(
-                                pinnedItem.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                if (query.isBlank()) "Your vault, ready for you"
+                                else "Nothing found",
+                                style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                "${fileKind(pinnedItem.mime, pinnedItem.name)} · Pinned",
-                                style = MaterialTheme.typography.bodySmall,
+                                if (query.isBlank()) "Add a note, file or folder."
+                                else "Try another name or phrase.",
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = Paper.Muted,
                             )
+                            if (query.isBlank()) TextButton(onAdd) { Text("Add something") }
                         }
-                        FileMenu(
-                            pinnedItem,
-                            { model.pin(pinnedItem.id) },
-                            { deleting = pinnedItem },
-                        )
                     }
-                }
-            }
-        }
-        if (pages.itemCount > pinned.size) {
-            item(key = "recent-label", span = { GridItemSpan(maxLineSpan) }) {
-                SectionLabel(if (query.isBlank()) "Items · pinned first" else "Results")
-            }
-        }
-        items(
-            count = (pages.itemCount - pinned.size).coerceAtLeast(0),
-            key = { i -> pages.peek(i + pinned.size)?.id ?: "loading/${i + pinned.size}" },
-        ) { i ->
-            val item = pages[i + pinned.size]
-            if (item == null)
-                Box(
-                    Modifier.height(190.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Paper.Inset)
-                )
-            else
-                Column {
-                    Row {
-                        if (selecting)
-                            Checkbox(
-                                item.id in chosen,
-                                { checked ->
-                                    chosen = if (checked) chosen + item.id else chosen - item.id
-                                },
+                if (browsing)
+                    items(jobs, key = { "job/${it.id}" }, span = { GridItemSpan(maxLineSpan) }) {
+                        job ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Import · ${job.completed} done · ${job.failed} failed",
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
                             )
-                        Box(Modifier.weight(1f)) { PaperItemCard(model, item, { deleting = item }) }
+                            TextButton({ model.resumeImport(job) }, enabled = !busy) {
+                                Text("Resume")
+                            }
+                        }
                     }
-                }
-        }
-        if (pages.loadState.refresh is LoadState.Loading) {
-            item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
-                LinearProgressIndicator(
-                    Modifier.fillMaxWidth(),
-                    color = Paper.Accent,
-                    trackColor = Paper.Inset,
-                )
             }
-        } else if (
-            pages.loadState.refresh is LoadState.Error || pages.loadState.append is LoadState.Error
-        ) {
-            item(key = "retry", span = { GridItemSpan(maxLineSpan) }) {
-                Column(Modifier.padding(vertical = 24.dp)) {
-                    Text(
-                        "This collection couldn’t be loaded.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    TextButton({ pages.retry() }) { Text("Try again") }
-                }
-            }
-        } else if (pages.itemCount == 0) {
-            item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
-                Column(
-                    Modifier.fillMaxWidth().padding(vertical = 36.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    PaperFileBadge(
-                        if (category == "notes") "application/x-securenote"
-                        else "application/octet-stream",
-                        Modifier.size(52.dp),
-                    )
-                    Spacer(Modifier.height(18.dp))
-                    Text(
-                        if (query.isNotBlank()) "Nothing found" else "Make yourself at home.",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Text(
-                        if (query.isNotBlank()) "Try another name or phrase."
-                        else "Add a note or import a file.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Paper.Muted,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    if (query.isBlank()) TextButton(onAdd) { Text("Add something") }
+            if (selecting) {
+                HorizontalDivider(color = Paper.Line)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    @Composable
+                    fun action(
+                        label: String,
+                        icon: PaperGlyph,
+                        enabled: Boolean = true,
+                        click: () -> Unit,
+                    ) {
+                        Column(
+                            Modifier.weight(1f)
+                                .heightIn(min = 64.dp)
+                                .clickable(enabled = enabled, onClick = click)
+                                .padding(vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            PaperIcon(
+                                icon,
+                                color =
+                                    if (enabled) Paper.Accent else Paper.Muted.copy(alpha = .4f),
+                            )
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = .4f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    action("Move", PaperGlyph.Move, chosen.isNotEmpty()) { moving = true }
+                    action("Rename", PaperGlyph.Draw, chosen.size == 1) {
+                        newName =
+                            pages.itemSnapshotList.items
+                                .firstOrNull { it.id in chosen }
+                                ?.name
+                                .orEmpty()
+                        renaming = true
+                    }
+                    action("Delete", PaperGlyph.Trash, chosen.isNotEmpty()) { bulkDelete = true }
+                    action("More", PaperGlyph.More) { more = true }
                 }
             }
         }
     }
+    if (creating) FolderNameDialog(model, null, if (browsing) parent else null) { creating = false }
+    if (moving)
+        FolderPicker(model, { moving = false }) {
+            model.moveFiles(chosen.toList(), it)
+            chosen = emptySet()
+            selecting = false
+        }
+    if (more)
+        PaperSheet("Selection", { more = false }) {
+            TextButton(
+                {
+                    more = false
+                    grouping = true
+                },
+                enabled = chosen.isNotEmpty(),
+            ) {
+                Text("By type")
+            }
+            TextButton({
+                chosen = emptySet()
+                more = false
+            }) {
+                Text("Clear")
+            }
+        }
     if (grouping)
-        AlertDialog(
-            onDismissRequest = { grouping = false },
-            title = { Text("Arrange ${chosen.size} items by type?") },
-            text = {
-                Text(
-                    "Moves selected items into Notes, Images, Videos, Audio, PDFs, EPUB or Other files folders in the current location. Encrypted files are kept."
-                )
-            },
-            confirmButton = {
-                TextButton({
-                    model.groupFiles(chosen.toList())
-                    chosen = emptySet()
-                    grouping = false
-                }) {
+        PaperSheet(
+            "Arrange by type?",
+            { grouping = false },
+            footer = {
+                Button(
+                    {
+                        model.groupFiles(chosen.toList())
+                        chosen = emptySet()
+                        selecting = false
+                        grouping = false
+                    },
+                    Modifier.fillMaxWidth(),
+                ) {
                     Text("Arrange")
                 }
             },
-            dismissButton = { TextButton({ grouping = false }) { Text("Cancel") } },
-        )
-    if (movingFiles)
-        FolderPicker(model, { movingFiles = false }) { destination ->
-            model.moveFiles(chosen.toList(), destination)
+        ) {
+            Text(
+                "Move selected items into file-type folders in this location. Encrypted contents are kept."
+            )
+        }
+    if (renaming)
+        PaperSheet(
+            "Rename file",
+            { renaming = false },
+            footer = {
+                Button(
+                    {
+                        chosen.singleOrNull()?.let { model.renameNote(it, newName.trim()) }
+                        renaming = false
+                    },
+                    Modifier.fillMaxWidth(),
+                    enabled = newName.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            },
+        ) {
+            OutlinedTextField(
+                newName,
+                { newName = it.take(255) },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().secureEditing(),
+            )
+        }
+    if (bulkDelete)
+        ConfirmPaperDelete("${chosen.size} selected items", { bulkDelete = false }) {
+            model.deleteFiles(chosen.toList())
             chosen = emptySet()
+            bulkDelete = false
+            selecting = false
         }
     deleting?.let { item ->
         ConfirmPaperDelete(item.name, { deleting = null }) {
-            deleting = null
             model.delete(item.id)
+            deleting = null
         }
     }
 }
 
 @Composable
-private fun SectionLabel(label: String, glyph: PaperGlyph? = null) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-        if (glyph != null) PaperIcon(glyph, color = Paper.Muted, modifier = Modifier.size(16.dp))
-    }
-}
-
-@Composable
-private fun PaperItemCard(model: VaultModel, item: ItemSummary, onDelete: () -> Unit) {
-    val isVisual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
-    var snippet by remember(item.id) { mutableStateOf("") }
-    LaunchedEffect(item.id, item.updated) {
-        if (item.mime == "application/x-securenote") {
-            try {
-                snippet = withContext(Dispatchers.IO) { model.store.dao.snippet(item.id).orEmpty() }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                snippet = ""
+private fun VaultEntry(
+    model: VaultModel,
+    item: ItemSummary,
+    grid: Boolean,
+    selecting: Boolean,
+    select: () -> Unit,
+    remove: () -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    val visual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
+    @Composable
+    fun options() {
+        Box {
+            PaperAction("Options for ${item.name}", PaperGlyph.More) { menu = true }
+            DropdownMenu(menu, { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (item.pinned) "Unpin" else "Pin") },
+                    onClick = {
+                        model.pin(item.id)
+                        menu = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Delete") },
+                    onClick = {
+                        menu = false
+                        remove()
+                    },
+                )
             }
         }
     }
-    Card(
-        onClick = { model.navigate(item.id) },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Paper.Surface),
-        border = BorderStroke(1.dp, Paper.Line.copy(alpha = 0.7f)),
-    ) {
-        if (isVisual) PaperThumbnail(model, item, Modifier.fillMaxWidth().height(112.dp))
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!isVisual && item.mime != "application/x-securenote")
-                PaperFileBadge(item.mime, name = item.name)
-            Text(
-                item.name,
-                style =
-                    if (item.mime == "application/x-securenote")
-                        MaterialTheme.typography.titleMedium
-                    else MaterialTheme.typography.titleSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (item.mime == "application/x-securenote")
+    val detail =
+        if (item.mime == "application/x-securenote") item.snippet.ifBlank { "Empty note" }
+        else "${fileKind(item.mime, item.name)} · ${fileSize(item.size)}"
+    val click = { if (selecting) select() else model.navigate(item.id) }
+    if (grid)
+        Card(
+            onClick = click,
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Paper.Surface),
+            border = BorderStroke(1.dp, Paper.Line),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            if (visual) PaperThumbnail(model, item, Modifier.fillMaxWidth().height(112.dp))
+            Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
                 Text(
-                    snippet.ifBlank { "Empty note" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Paper.Muted,
+                    item.name,
+                    Modifier.padding(end = 8.dp),
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-            item.folderName?.let {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        detail,
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = Paper.Muted,
+                    )
+                    options()
+                }
+            }
+        }
+    else
+        Row(
+            Modifier.fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .clickable(onClick = click)
+                .padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (visual)
+                PaperThumbnail(model, item, Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
+            else PaperFileBadge(item.mime, name = item.name)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp)) {
                 Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Paper.Muted,
+                    item.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
-                )
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (item.mime == "application/x-securenote") itemDate(item.updated)
-                    else "${fileKind(item.mime, item.name)} · ${fileSize(item.size)}",
-                    style = MaterialTheme.typography.labelSmall,
+                    overflow = TextOverflow.Ellipsis,
                     color = Paper.Muted,
-                    modifier = Modifier.weight(1f),
                 )
-                if (item.pinned)
-                    PaperIcon(PaperGlyph.Pin, "Pinned", modifier = Modifier.size(16.dp))
-                FileMenu(item, { model.pin(item.id) }, onDelete)
+                item.folderName?.let {
+                    if (!model.folderBrowsing.value)
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            color = Paper.Muted,
+                        )
+                }
             }
+            if (item.pinned) PaperIcon(PaperGlyph.Pin, "Pinned", Modifier.size(14.dp), Paper.Accent)
+            options()
         }
-    }
-    DisposableEffect(item.id) { onDispose { snippet = "" } }
 }
 
 @Composable
-private fun FileMenu(item: ItemSummary, pin: () -> Unit, delete: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton({ expanded = true }, modifier = Modifier.size(48.dp)) {
-            PaperIcon(PaperGlyph.More, "Options for ${item.name}", color = Paper.Muted)
-        }
-        DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(if (item.pinned) "Unpin" else "Pin") },
-                onClick = {
-                    expanded = false
-                    pin()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                onClick = {
-                    expanded = false
-                    delete()
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun PaperThumbnail(model: VaultModel, item: ItemSummary, modifier: Modifier) {
+internal fun PaperThumbnail(model: VaultModel, item: ItemSummary, modifier: Modifier) {
     var bitmap by remember(item.id) { mutableStateOf<Bitmap?>(null) }
     val busy by model.busy.collectAsState()
     LaunchedEffect(item.id, busy) {

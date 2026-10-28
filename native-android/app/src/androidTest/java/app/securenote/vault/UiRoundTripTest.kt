@@ -98,7 +98,7 @@ class UiRoundTripTest {
         val model = androidx.lifecycle.ViewModelProvider(rule.activity)[VaultModel::class.java]
         val revokedFirst = java.util.concurrent.atomic.AtomicBoolean(false)
         model.onLock { revokedFirst.set(!model.store.isOpen) }
-        rule.onNodeWithText("Lock", substring = false).performClick()
+        rule.onNodeWithContentDescription("Lock", substring = false).performClick()
         org.junit.Assert.assertTrue("Revoke readers before native cleanup", revokedFirst.get())
         rule.onNodeWithTag("vault-password").performTextInput("Synthetic UI password 123")
         rule.onNodeWithText("Unlock", substring = false).performScrollTo().performClick()
@@ -146,9 +146,10 @@ class UiRoundTripTest {
         rule.waitUntil(15000) {
             rule.onAllNodesWithTag("native-media-player").fetchSemanticsNodes().isNotEmpty()
         }
-        onView(withId(androidx.media3.ui.R.id.exo_play_pause))
-            .check(matches(isDisplayed()))
-            .perform(androidx.test.espresso.action.ViewActions.click())
+        rule
+            .onNodeWithContentDescription("Play", substring = false)
+            .performScrollTo()
+            .performClick()
         rule.waitUntil(15000) { model.playing }
         // Pause alone must revoke the session, before the activity stops.
         rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
