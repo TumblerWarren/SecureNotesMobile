@@ -147,8 +147,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                 Text(
                     if (plan.backup)
                         "Save your encrypted vault locally or to a cloud provider shown in the file picker. Restore requires the password valid when this backup is created, or its recovery key. This is a snapshot, not automatic cloud sync."
-                    else
-                        "Copies outside the vault are not encrypted. Files keep their names; duplicates get a numbered suffix. Notes use a named folder containing note data, drawings and attachments."
+                    else "Copies are unencrypted. Duplicate names get a number."
                 )
                 if (!plan.backup)
                     Column(Modifier.fillMaxWidth().selectableGroup()) {
@@ -172,6 +171,8 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                             }
                         }
                     }
+                if (!plan.backup && plan.mime == "application/x-securenote")
+                    Text("Notes use a named folder containing note data and attachments.")
             }
     }
     restore?.let { source ->
