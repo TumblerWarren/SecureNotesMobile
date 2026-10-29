@@ -1,9 +1,11 @@
 # SecureNote Vault
 
-The Android application is being replaced with a native Kotlin vault in [`native-android/`](native-android/). It stores notes and arbitrary files locally with password-based encryption, and reads supported documents and media inside the app using Android components.
+SecureNote is a native Android vault for encrypted notes and files. Supported images, PDF and EPUB documents, music and video can be opened inside the app.
 
-The rewrite includes encrypted search, rich-text notes, tables, drawings, attachments, internal image/PDF/text viewers, music/video playback, offline recovery, and a read-only importer for legacy encrypted note databases. See the [native build instructions](native-android/README.md), [security boundaries](native-android/docs/SECURITY.md), and [performance acceptance targets](native-android/docs/PERFORMANCE.md).
+[Download the latest signed APK](https://github.com/TumblerWarren/SecureNotesMobile/releases/latest) · [Build 88 release notes](native-android/docs/RELEASE-NOTES.md) · [Native Android documentation](native-android/README.md)
 
-The debug build installs alongside the existing application. The source is under validation; device tests, physical-device performance measurements and independent security review are release gates. Keep another copy of important data during validation.
+The vault stores its encrypted database and encrypted files in app-private storage. You can make a manual encrypted backup to a local or cloud document provider, and export selected files as readable copies. Keep a separate backup and the backup-time password or recovery key. See [vault transfers](native-android/docs/VAULT-TRANSFERS.md) and [security boundaries](native-android/docs/SECURITY.md).
 
-The original Expo application remains in the root directory for migration and reference. Its [original README](native-android/docs/LEGACY-README.md) is preserved. Production upgrades require the original signing key; no production deployment has been performed.
+The native release installs beside the original app and has separate storage; original data is not automatically transferred. Keep the original app and data until migration is verified. The original Expo source and its [README](native-android/docs/LEGACY-README.md) remain for reference.
+
+Emulator checks have run, but independent security review and physical-device performance measurements remain outstanding.
