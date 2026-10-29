@@ -8,7 +8,7 @@ import tempfile
 import time
 
 LEGACY = 'com.anonymous.SecureNotesMobile'
-VAULT = LEGACY + '.vault'
+VAULT = 'app.securenote.vault'
 apk = pathlib.Path(sys.argv[1]).resolve()
 sdk = pathlib.Path(os.environ['ANDROID_HOME'])
 build_tools = sdk / 'build-tools/35.0.0'
