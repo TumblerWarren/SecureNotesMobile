@@ -322,6 +322,14 @@ class VisualWalkthroughTest {
                         }
                 }
                 waitText("Delete originals?")
+                val originalCheckbox =
+                    rule.onNodeWithContentDescription("Synthetic original 1.png", substring = false)
+                originalCheckbox
+                    .assertIsOn()
+                    .performClick()
+                    .assertIsOff()
+                    .performClick()
+                    .assertIsOn()
                 rule.onNodeWithText("Keep originals").assertIsDisplayed()
                 rule.onNodeWithText("Delete selected").assertIsDisplayed()
                 val deletionAction = rule.onNodeWithText("Delete selected").fetchSemanticsNode()
@@ -333,6 +341,38 @@ class VisualWalkthroughTest {
                 save("original-deletion-confirmation")
                 rule.onNodeWithText("Keep originals").performClick()
                 rule.runOnIdle { assertTrue(model.originalsToDelete.value.isEmpty()) }
+            }
+            step("restore-panel-keyboard") {
+                home()
+                rule.runOnIdle {
+                    model.restoreRequest.value =
+                        android.net.Uri.parse("content://app.securenote.synthetictransfers/unused")
+                }
+                waitText("Restore encrypted backup")
+                save("restore-panel")
+                rule
+                    .onNodeWithText("Backup password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-backup-password-keyboard")
+                hideKeyboard()
+                rule
+                    .onNodeWithText("Use recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                rule
+                    .onNodeWithText("Recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-recovery-keyboard")
+                hideKeyboard()
+                rule
+                    .onNodeWithText("New password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-new-password-keyboard")
+                hideKeyboard()
+                tool("Close").performClick()
             }
             step("password-form") {
                 home()
