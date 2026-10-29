@@ -25,7 +25,7 @@ internal fun WelcomePage(
 ) {
     BoxWithConstraints(modifier.fillMaxWidth().clipToBounds()) {
         val viewportHeight = maxHeight
-        val short = viewportHeight < 220.dp
+        val short = viewportHeight < 260.dp
         val artHeight by
             animateDpAsState(
                 if (short) 0.dp else if (compactInput) 40.dp else 104.dp,
@@ -91,7 +91,7 @@ internal fun WelcomePage(
                     border = BorderStroke(1.dp, Paper.Line),
                 ) {
                     Column(
-                        Modifier.padding(if (short) 12.dp else 20.dp),
+                        Modifier.padding(if (short) 4.dp else 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
