@@ -96,6 +96,24 @@ class VaultTransferTest {
             val id = source.importBytes("private-image.png", "image/png", bytes)
             val note = source.newNote()
             source.addBlock(note, "text", "Private note content")
+            source.addBlock(note, "attachment", id)
+            val selection = ByteArrayOutputStream()
+            VaultTransfers(context, source)
+                .export(VaultExport(listOf(id, note), "selection.zip"), selection)
+            val exportedEntries = linkedMapOf<String, ByteArray>()
+            ZipInputStream(selection.toByteArray().inputStream()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    exportedEntries[entry.name] = zip.readBytes()
+                    zip.closeEntry()
+                }
+            }
+            assertArrayEquals(bytes, exportedEntries["$id/private-image.png"])
+            assertArrayEquals(bytes, exportedEntries["$note/attachments/$id/private-image.png"])
+            assertTrue(
+                String(checkNotNull(exportedEntries["$note/note.json"]))
+                    .contains("Private note content")
+            )
             val output = ByteArrayOutputStream()
             source.backup(output)
             val backup = output.toByteArray()
@@ -105,7 +123,10 @@ class VaultTransferTest {
             val exported = ByteArrayOutputStream()
             VaultTransfers(context, restored).copyFile(id, exported)
             assertArrayEquals(bytes, exported.toByteArray())
-            assertEquals("Private note content", restored.dao.blocks(note).last().content)
+            assertTrue(restored.dao.blocks(note).any { it.content == "Private note content" })
+            assertTrue(
+                restored.dao.blocks(note).any { it.kind == "attachment" && it.content == id }
+            )
             failed { restored.restore(backup.inputStream(), password.toByteArray()) }
             failed { bad.restore(backup.inputStream(), "wrong password".toByteArray()) }
             assertFalse(bad.exists)
