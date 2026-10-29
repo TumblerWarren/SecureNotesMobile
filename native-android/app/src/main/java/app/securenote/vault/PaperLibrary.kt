@@ -632,6 +632,9 @@ fun PaperLibrary(
                         action("Delete", PaperGlyph.Trash, chosen.isNotEmpty()) {
                             bulkDelete = true
                         }
+                        action("Export", PaperGlyph.Import, chosen.isNotEmpty()) {
+                            model.requestExport(chosen.toList())
+                        }
                         action("More", PaperGlyph.More) { more = true }
                     }
                 }
@@ -789,6 +792,13 @@ private fun VaultEntry(
                     onClick = {
                         menu = false
                         longSelect()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Export copy") },
+                    onClick = {
+                        menu = false
+                        model.requestExport(listOf(item.id))
                     },
                 )
                 DropdownMenuItem(
