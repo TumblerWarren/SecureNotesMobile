@@ -60,6 +60,27 @@ internal fun PaperHeader(
     leading: @Composable () -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
+    PaperTabHeader(modifier, compact) {
+        leading()
+        Text(
+            title,
+            Modifier.weight(1f).padding(horizontal = 8.dp),
+            style =
+                if (compact) MaterialTheme.typography.titleMedium
+                else MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        actions()
+    }
+}
+
+@Composable
+internal fun PaperTabHeader(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    content: @Composable RowScope.() -> Unit,
+) {
     Surface(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         color = Paper.Header,
@@ -71,17 +92,7 @@ internal fun PaperHeader(
                 .padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            leading()
-            Text(
-                title,
-                Modifier.weight(1f).padding(horizontal = 8.dp),
-                style =
-                    if (compact) MaterialTheme.typography.titleMedium
-                    else MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            actions()
+            content()
         }
     }
 }
