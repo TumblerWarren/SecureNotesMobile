@@ -203,9 +203,9 @@ internal fun VaultApp(model: VaultModel) {
             .secureEditing()
     ) {
         val hideChrome = imeVisible || maxHeight < 180.dp
+        val compactHeader = !open && hideChrome && maxHeight < 220.dp
         Column(Modifier.fillMaxSize()) {
             if (!open || (recovery != null && !hideChrome)) {
-                val compactHeader = !open && hideChrome && maxHeight < 220.dp
                 PaperHeader(
                     "SecureNote",
                     Modifier.testTag("welcome-header"),
