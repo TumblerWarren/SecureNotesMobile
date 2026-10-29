@@ -25,6 +25,33 @@ class VaultTransferTest {
     }
 
     @Test
+    fun approvedVerifiedDeletionRemovesOnlyTheSyntheticSource() = runBlocking {
+        val name = directory()
+        val store = VaultStore(context, name)
+        val uri =
+            android.provider.DocumentsContract.buildDocumentUri(
+                "app.securenote.synthetictransfers",
+                UUID.randomUUID().toString(),
+            )
+        try {
+            store.create(password.toByteArray())
+            val id = store.import(uri) {}
+            val transfer = VaultTransfers(context, store)
+            val receipt = transfer.verify(uri, id)
+            // Verification alone must not delete anything.
+            context.contentResolver.openInputStream(uri)!!.use { assertTrue(it.read() >= 0) }
+            assertTrue(transfer.deleteOriginal(receipt))
+            failed { context.contentResolver.openInputStream(uri)!!.close() }
+            val output = ByteArrayOutputStream()
+            transfer.copyFile(id, output)
+            assertTrue(output.toString("UTF-8").startsWith("Synthetic private transfer fixture "))
+        } finally {
+            store.close()
+            java.io.File(context.noBackupFilesDir, name).deleteRecursively()
+        }
+    }
+
+    @Test
     fun changedOriginalAndDeniedDeletionLeaveTheVaultCopyIntact() = runBlocking {
         val name = directory()
         val store = VaultStore(context, name)
