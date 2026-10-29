@@ -187,7 +187,11 @@ class VisualWalkthroughTest {
                     .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))
                 rule.onNodeWithTag("select-${ids.getValue("audio")}").performClick()
                 rule.onNodeWithText("Move", substring = false).performClick()
-                rule.onNodeWithTag("folder-destination-work").performScrollTo().performClick()
+                rule
+                    .onNodeWithTag("folder-destinations")
+                    .performScrollToNode(hasTestTag("folder-destination-work"))
+                rule.onNodeWithTag("folder-destination-work").performClick()
+                waitText("Folders / Work")
                 rule.onNodeWithText("Move here", substring = false).performClick()
                 rule.waitUntil(15000) {
                     runBlocking { ids.getValue("audio") in store.dao.members("work") }
