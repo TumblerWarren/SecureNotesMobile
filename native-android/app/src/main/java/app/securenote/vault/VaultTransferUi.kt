@@ -7,6 +7,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -80,6 +82,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                                 selected =
                                     if (checked) selected + receipt.id else selected - receipt.id
                             },
+                            modifier = Modifier.semantics { contentDescription = receipt.name },
                         )
                         Text(receipt.name, Modifier.weight(1f), maxLines = 2)
                     }
@@ -126,6 +129,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                 password = ""
                 model.restoreRequest.value = null
             },
+            compactOnKeyboard = true,
             footer = {
                 TextButton(
                     {
@@ -182,7 +186,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                 password,
                 { password = it },
                 label = {
-                    Text(if (recoveryMode) "New password (16+ characters)" else "Backup password")
+                    Text(if (recoveryMode) "New password" else "Backup password")
                 },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
