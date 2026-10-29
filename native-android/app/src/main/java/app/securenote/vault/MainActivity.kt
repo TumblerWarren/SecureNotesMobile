@@ -643,6 +643,7 @@ internal fun VaultApp(model: VaultModel) {
             }
         if (legacySource != null) LegacyPasswordDialog(model)
     }
+    VaultTransferDialogs(model)
 }
 
 @Composable
@@ -735,6 +736,7 @@ internal fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean)
             color = Paper.Muted,
         )
     }
+    if (creating && !recoveryMode) RestoreBackupButton(model, !busy)
     val valid =
         if (creating || recoveryMode) password.length >= 16 && password == confirmation
         else password.isNotEmpty()
@@ -786,7 +788,7 @@ internal fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean)
                     if (model.pendingImports.isNotEmpty())
                         "Unlock to import your selected files. Originals remain outside the vault."
                     else
-                        "On this device. No cloud backup. Deleting app storage permanently deletes your vault.",
+                        "Stored on this device. Save an encrypted backup before uninstalling or clearing app storage.",
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
                     color = Paper.Muted,
