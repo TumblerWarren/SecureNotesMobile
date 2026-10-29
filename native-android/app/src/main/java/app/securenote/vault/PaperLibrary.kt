@@ -108,6 +108,7 @@ fun PaperLibrary(
         @Composable
         (
             header: @Composable RowScope.() -> Unit,
+            rail: @Composable () -> Unit,
             content: @Composable () -> Unit,
         ) -> Unit,
     onAdd: () -> Unit,
@@ -243,47 +244,8 @@ fun PaperLibrary(
                     ),
             )
         }
-        layout({
-            if (selecting)
-                PaperAction("Finish selecting", PaperGlyph.Close) {
-                    selecting = false
-                    chosen = emptySet()
-                }
-            else if (browsing && parent != null)
-                PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
-            Column(
-                if (short && !selecting) Modifier.widthIn(max = 120.dp).padding(horizontal = 12.dp)
-                else Modifier.weight(1f).padding(start = 12.dp)
-            ) {
-                Text(
-                    if (selecting) "${chosen.size} selected" else title,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (!short && !selecting)
-                    Text(
-                        if (pages.loadState.refresh is LoadState.Loading && pages.itemCount == 0)
-                            "Loading…"
-                        else
-                            countLabel(pages.itemCount, "item") +
-                                if (browsing && parent == null) " · Unfiled" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Paper.Muted,
-                        maxLines = 1,
-                    )
-            }
-            if (short && !selecting) search(Modifier.weight(1f).padding(vertical = 4.dp))
-            if (!selecting) {
-                PaperAction(
-                    "Add item",
-                    PaperGlyph.Add,
-                    Modifier.testTag("add-item"),
-                    enabled = !busy,
-                    action = onAdd,
-                )
-                PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
-            }
+        @Composable
+        fun libraryMenu() {
             Box {
                 PaperAction("Sort", PaperGlyph.More) { sorting = true }
                 DropdownMenu(sorting, { sorting = false }) {
@@ -338,8 +300,90 @@ fun PaperLibrary(
                     }
                 }
             }
-        }) {
+        }
+        layout(
+            {
+                if (selecting)
+                    PaperAction("Finish selecting", PaperGlyph.Close) {
+                        selecting = false
+                        chosen = emptySet()
+                    }
+                else if (browsing && parent != null)
+                    PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
+                Column(
+                    if (short && !selecting)
+                        Modifier.widthIn(max = 120.dp).padding(horizontal = 12.dp)
+                    else Modifier.weight(1f).padding(start = 12.dp)
+                ) {
+                    Text(
+                        if (selecting) "${chosen.size} selected" else title,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!short && !selecting)
+                        Text(
+                            if (
+                                pages.loadState.refresh is LoadState.Loading && pages.itemCount == 0
+                            )
+                                "Loading…"
+                            else
+                                countLabel(pages.itemCount, "item") +
+                                    if (browsing && parent == null) " · Unfiled" else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Paper.Muted,
+                            maxLines = 1,
+                        )
+                }
+                if (short && !selecting) search(Modifier.weight(1f).padding(vertical = 4.dp))
+                if (!selecting) {
+                    PaperAction(
+                        "Add item",
+                        PaperGlyph.Add,
+                        Modifier.testTag("add-item"),
+                        enabled = !busy,
+                        action = onAdd,
+                    )
+                    PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
+                }
+                libraryMenu()
+            },
+            {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        if (selecting) "${chosen.size} selected" else title,
+                        Modifier.padding(6.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (selecting)
+                        PaperAction("Finish selecting", PaperGlyph.Close) {
+                            selecting = false
+                            chosen = emptySet()
+                        }
+                    else {
+                        if (browsing && parent != null)
+                            PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
+                        PaperAction(
+                            "Add item",
+                            PaperGlyph.Add,
+                            Modifier.testTag("add-item"),
+                            enabled = !busy,
+                            action = onAdd,
+                        )
+                        PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
+                    }
+                    libraryMenu()
+                }
+            },
+        ) {
             Column(Modifier.fillMaxSize()) {
+                if (short && !selecting)
+                    search(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
                 if (!selecting && !short) {
                     if (browsing && parent != null)
                         Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
