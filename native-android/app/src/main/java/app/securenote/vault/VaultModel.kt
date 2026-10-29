@@ -119,11 +119,19 @@ internal constructor(
             return
         }
         runWork("Restore backup") {
+            val input = java.util.concurrent.atomic.AtomicReference<java.io.InputStream?>(null)
+            val unregister = onLock {
+                password.fill(0)
+                recoverySecret?.fill(0)
+                runCatching { input.get()?.close() }
+            }
             try {
                 withContext(Dispatchers.IO) {
                     (getApplication<Application>().contentResolver.openInputStream(source)
                             ?: error("Backup unavailable"))
                         .use {
+                            input.set(it)
+                            currentCoroutineContext().ensureActive()
                             store.restore(it, password, recoverySecret)
                         }
                 }
@@ -133,6 +141,8 @@ internal constructor(
                         "Backup restored. Unlock with the backup's password."
                     else "Backup restored. Unlock with your new password."
             } finally {
+                input.set(null)
+                unregister()
                 password.fill(0)
                 recoverySecret?.fill(0)
             }
