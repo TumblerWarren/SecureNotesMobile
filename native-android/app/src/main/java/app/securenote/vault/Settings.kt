@@ -166,6 +166,16 @@ fun SettingsContent(
                     legacy,
                 )
                 Spacer(Modifier.height(12.dp))
+                SettingsHeading("Backup")
+                SettingsRow(
+                    "Encrypted backup",
+                    "Save locally or to a cloud provider",
+                    PaperGlyph.Shield,
+                    !busy,
+                ) {
+                    model.requestBackup()
+                }
+                Spacer(Modifier.height(12.dp))
                 SettingsHeading("On this device")
                 SettingsRow(
                     "Storage & recovery",
@@ -184,7 +194,7 @@ fun SettingsContent(
                 if (title == "Auto-lock")
                     "Locks when you leave the app or turn off the screen. Locks after five minutes of inactivity; playback counts as activity."
                 else
-                    "No cloud backup. Imports create encrypted copies; originals remain outside the vault. Recovery keys cannot restore deleted files.",
+                    "Encrypted backups can be saved through the file picker to local or cloud storage. Automatic cloud sync is not enabled. Imports create encrypted copies; originals are deleted only after verification and your approval. Recovery keys cannot restore deleted files without a backup.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }

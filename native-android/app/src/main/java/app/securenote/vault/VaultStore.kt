@@ -422,6 +422,231 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
         return id
     }
 
+    /** Ciphertext-only snapshot. The writer lease prevents index/WAL mutation during copying. */
+    suspend fun backup(output: java.io.OutputStream) =
+        withContext(Dispatchers.IO) {
+            checkSession()
+            val authenticator = checkNotNull(session).withRoot { BackupAuthentication(it) }
+            checkNotNull(database).useWriterConnection { connection ->
+                connection.withTransaction(Transactor.SQLiteTransactionType.IMMEDIATE) {
+                    java.util.zip.ZipOutputStream(output).use { zip ->
+                        // Ciphertext cannot be compressed usefully; avoid burning CPU on large
+                        // media.
+                        zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
+                        zip.putNextEntry(java.util.zip.ZipEntry("format"))
+                        zip.write("SecureNote encrypted vault v1".toByteArray())
+                        zip.closeEntry()
+                        val files =
+                            listOf("header", "index.db", "index.db-wal")
+                                .map { File(directory, it) }
+                                .filter { it.isFile } +
+                                dao.objectIds().map { File(directory, "objects/$it.svf") }
+                        require(
+                            files.any { it.name == "header" } && files.any { it.name == "index.db" }
+                        ) {
+                            "Vault is incomplete. Backup was not created."
+                        }
+                        require(files.size + 2 <= 100000) {
+                            "Vault exceeds the backup entry limit."
+                        }
+                        require(
+                            files.fold(0L) { total, file -> Math.addExact(total, file.length()) } <=
+                                1024L * 1024 * 1024 * 1024 - 64
+                        ) {
+                            "Vault exceeds the backup size limit."
+                        }
+                        val buffer = ByteArray(64 * 1024)
+                        try {
+                            for (file in files) {
+                                checkSession()
+                                ensureActive()
+                                require(file.isFile) {
+                                    "Vault is incomplete. Backup was not created."
+                                }
+                                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                                zip.putNextEntry(
+                                    java.util.zip.ZipEntry(
+                                        file.relativeTo(directory).invariantSeparatorsPath
+                                    )
+                                )
+                                file.inputStream().use { input ->
+                                    while (true) {
+                                        ensureActive()
+                                        checkSession()
+                                        val n = input.read(buffer)
+                                        if (n < 0) break
+                                        zip.write(buffer, 0, n)
+                                        digest.update(buffer, 0, n)
+                                    }
+                                }
+                                zip.closeEntry()
+                                authenticator.entry(
+                                    file.relativeTo(directory).invariantSeparatorsPath,
+                                    digest.digest(),
+                                )
+                            }
+                            zip.putNextEntry(java.util.zip.ZipEntry("authentication"))
+                            zip.write(authenticator.finish())
+                            zip.closeEntry()
+                        } finally {
+                            buffer.fill(0)
+                        }
+                    }
+                }
+            }
+        }
+
+    /**
+     * Never replaces an existing vault. Untrusted archives are validated in a separate directory.
+     */
+    suspend fun restore(
+        input: java.io.InputStream,
+        password: ByteArray,
+        recovery: ByteArray? = null,
+    ) =
+        withContext(Dispatchers.IO) {
+            require(!isOpen && !exists && !File(directory, "index.db").exists()) {
+                "Restore requires an empty vault."
+            }
+            val stageName = "restore-" + UUID.randomUUID()
+            val stage = File(context.noBackupFilesDir, stageName).apply { mkdirs() }
+            var candidate: VaultStore? = null
+            try {
+                val seen = mutableSetOf<String>()
+                val payloadDigests = linkedMapOf<String, ByteArray>()
+                var total = 0L
+                java.util.zip.ZipInputStream(input).use { zip ->
+                    val buffer = ByteArray(64 * 1024)
+                    try {
+                        while (true) {
+                            ensureActive()
+                            val entry = zip.nextEntry ?: break
+                            val name = entry.name
+                            require(!entry.isDirectory && seen.add(name) && seen.size <= 100000) {
+                                "Invalid backup entries."
+                            }
+                            require(
+                                name in
+                                    setOf(
+                                        "format",
+                                        "header",
+                                        "index.db",
+                                        "index.db-wal",
+                                        "authentication",
+                                    ) || Regex("objects/[0-9a-f-]{36}\\.svf").matches(name)
+                            ) {
+                                "Invalid backup path."
+                            }
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            val file = File(stage, name)
+                            file.parentFile!!.mkdirs()
+                            java.io.FileOutputStream(file).use { out ->
+                                var length = 0L
+                                while (true) {
+                                    ensureActive()
+                                    val n = zip.read(buffer)
+                                    if (n < 0) break
+                                    length += n
+                                    total += n
+                                    require(total <= 1024L * 1024 * 1024 * 1024) {
+                                        "Backup exceeds restore limit."
+                                    }
+                                    if (name == "format") require(length <= 64)
+                                    if (name == "header") require(length <= VaultHeader.SIZE)
+                                    if (name == "authentication") require(length <= 32)
+                                    out.write(buffer, 0, n)
+                                    digest.update(buffer, 0, n)
+                                }
+                                out.fd.sync()
+                            }
+                            zip.closeEntry()
+                            if (name != "format" && name != "authentication")
+                                payloadDigests[name] = digest.digest()
+                        }
+                    } finally {
+                        buffer.fill(0)
+                    }
+                }
+                require(
+                    seen.containsAll(listOf("format", "header", "index.db", "authentication"))
+                ) {
+                    "Incomplete backup."
+                }
+                require(File(stage, "format").readText() == "SecureNote encrypted vault v1") {
+                    "Unsupported backup format."
+                }
+                File(stage, "format").delete()
+                val restored = VaultStore(context, stageName)
+                candidate = restored
+                val h = restored.header()
+                val root =
+                    if (recovery == null) h.unlock(password.copyOf(), Sodium)
+                    else h.recover(recovery.copyOf())
+                try {
+                    val authentication = BackupAuthentication(root)
+                    payloadDigests.forEach { (name, digest) -> authentication.entry(name, digest) }
+                    require(
+                        java.security.MessageDigest.isEqual(
+                            authentication.finish(),
+                            File(stage, "authentication").readBytes(),
+                        )
+                    ) {
+                        "Backup authentication failed."
+                    }
+                    File(stage, "authentication").delete()
+                    restored.open(h, root, restored.epoch.get())
+                } finally {
+                    root.fill(0)
+                }
+                checkNotNull(restored.database).useReaderConnection { connection ->
+                    connection.usePrepared("PRAGMA integrity_check") {
+                        check(it.step() && it.getText(0) == "ok") { "Backup database is damaged." }
+                    }
+                }
+                val verifier = VaultTransfers(context, restored)
+                val sink =
+                    object : java.io.OutputStream() {
+                        override fun write(b: Int) {}
+
+                        override fun write(b: ByteArray, o: Int, n: Int) {}
+                    }
+                for (id in restored.dao.objectIds()) {
+                    ensureActive()
+                    verifier.copyFile(id, sink)
+                }
+                if (recovery != null) restored.recover(recovery.copyOf(), password.copyOf())
+                restored.close()
+                candidate = null
+                ensureActive()
+                require(!exists && !File(directory, "index.db").exists()) {
+                    "A vault already exists."
+                }
+                require(directory.listFiles().isNullOrEmpty()) { "Vault directory is not empty." }
+                check(directory.delete())
+                try {
+                    java.nio.file.Files.move(
+                        stage.toPath(),
+                        directory.toPath(),
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (e: Exception) {
+                    directory.mkdirs()
+                    throw e
+                }
+                val fd = Os.open(context.noBackupFilesDir.path, OsConstants.O_RDONLY, 0)
+                try {
+                    Os.fsync(fd)
+                } finally {
+                    Os.close(fd)
+                }
+            } finally {
+                password.fill(0)
+                recovery?.fill(0)
+                candidate?.close()
+                stage.deleteRecursively()
+            }
+        }
+
     fun revoke() {
         synchronized(authority) {
             epoch.incrementAndGet()

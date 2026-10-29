@@ -296,6 +296,84 @@ class VisualWalkthroughTest {
                 rule.onNodeWithTag("nav-settings").assertIsSelected()
                 rule.onNodeWithTag("settings-header").assertIsDisplayed()
             }
+            step("transfer-confirmations") {
+                home()
+                rule.runOnIdle { model.requestBackup() }
+                waitText("Encrypted backup")
+                rule.onNodeWithText("Choose destination").assertIsDisplayed()
+                save("encrypted-backup-confirmation")
+                tool("Close").performClick()
+                rule.runOnIdle { model.requestExport(listOf(ids.getValue("image"))) }
+                waitText("Export unencrypted copy?")
+                rule.onNodeWithText("Choose destination").assertIsDisplayed()
+                save("decrypted-export-confirmation")
+                tool("Close").performClick()
+                rule.runOnIdle {
+                    model.originalsToDelete.value =
+                        (1..20).map { index ->
+                            VerifiedOriginal(
+                                android.net.Uri.parse(
+                                    "content://app.securenote.synthetictransfers/fixture-$index"
+                                ),
+                                "synthetic-$index",
+                                "Synthetic original $index.png",
+                                ByteArray(32),
+                            )
+                        }
+                }
+                waitText("Delete originals?")
+                val originalCheckbox =
+                    rule.onNodeWithContentDescription("Synthetic original 1.png", substring = false)
+                originalCheckbox
+                    .assertIsOn()
+                    .performClick()
+                    .assertIsOff()
+                    .performClick()
+                    .assertIsOn()
+                rule.onNodeWithText("Keep originals").assertIsDisplayed()
+                rule.onNodeWithText("Delete selected").assertIsDisplayed()
+                val deletionAction = rule.onNodeWithText("Delete selected").fetchSemanticsNode()
+                assertTrue(
+                    "Deletion action must not squeeze words into letter-sized lines",
+                    deletionAction.size.height <=
+                        48f * font * rule.activity.resources.displayMetrics.density + 4,
+                )
+                save("original-deletion-confirmation")
+                rule.onNodeWithText("Keep originals").performClick()
+                rule.runOnIdle { assertTrue(model.originalsToDelete.value.isEmpty()) }
+            }
+            step("restore-panel-keyboard") {
+                home()
+                rule.runOnIdle {
+                    model.restoreRequest.value =
+                        android.net.Uri.parse("content://app.securenote.synthetictransfers/unused")
+                }
+                waitText("Restore encrypted backup")
+                save("restore-panel")
+                rule
+                    .onNodeWithText("Backup password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-backup-password-keyboard")
+                hideKeyboard()
+                rule
+                    .onNodeWithText("Use recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                rule
+                    .onNodeWithText("Recovery key", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-recovery-keyboard")
+                hideKeyboard()
+                rule
+                    .onNodeWithText("New password", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                save("restore-new-password-keyboard")
+                hideKeyboard()
+                tool("Close").performClick()
+            }
             step("password-form") {
                 home()
                 navigateTab("settings")
@@ -722,6 +800,9 @@ class VisualWalkthroughTest {
         rule.runOnIdle {
             model.message.value = ""
             model.legacySource.value = null
+            model.exportRequest.value = null
+            model.originalsToDelete.value = emptyList()
+            model.restoreRequest.value = null
             model.recovery.value = null
             model.query.value = ""
             model.folderBrowsing.value = false
@@ -779,13 +860,29 @@ class VisualWalkthroughTest {
     }
 
     private fun hideKeyboard() {
+        lateinit var active: View
         instrumentation.runOnMainSync {
-            val view = rule.activity.window.decorView
+            val roots = WindowInspector.getGlobalWindowViews()
+            active =
+                roots.lastOrNull { it.hasWindowFocus() }
+                    ?: roots.lastOrNull { it.isShown }
+                    ?: rule.activity.window.decorView
             (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
                     as android.view.inputmethod.InputMethodManager)
-                .hideSoftInputFromWindow(view.windowToken, 0)
-            view.clearFocus()
+                .hideSoftInputFromWindow(active.windowToken, 0)
+            active.clearFocus()
         }
+        rule.waitUntil(5000) {
+            var visible = false
+            instrumentation.runOnMainSync {
+                val insets = androidx.core.view.ViewCompat.getRootWindowInsets(active)
+                val ime = androidx.core.view.WindowInsetsCompat.Type.ime()
+                visible =
+                    insets?.isVisible(ime) == true || (insets?.getInsets(ime)?.bottom ?: 0) > 0
+            }
+            !visible
+        }
+        rule.waitForIdle()
     }
 
     private fun findEditor(view: View): NoteEditText? {
