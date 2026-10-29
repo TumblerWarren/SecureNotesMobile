@@ -2,6 +2,8 @@ package app.securenote.vault
 
 import android.view.WindowManager
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,7 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +51,41 @@ internal fun PaperAction(
     }
 }
 
+/** Shared chrome for the welcome screen and settings. */
+@Composable
+internal fun PaperHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    leading: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    Surface(
+        modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        color = Paper.Header,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Paper.Line),
+    ) {
+        Row(
+            Modifier.heightIn(min = if (compact) 32.dp else 52.dp)
+                .padding(start = 4.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            leading()
+            Text(
+                title,
+                Modifier.weight(1f).padding(horizontal = 8.dp),
+                style =
+                    if (compact) MaterialTheme.typography.titleMedium
+                    else MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            actions()
+        }
+    }
+}
+
 /** Content-sized, scrollable sheet. Secure even when hosted outside the main activity. */
 @Composable
 internal fun PaperSheet(
@@ -70,10 +109,24 @@ internal fun PaperSheet(
             Modifier.fillMaxSize().safeDrawingPadding().imePadding(),
             contentAlignment = Alignment.BottomCenter,
         ) {
+            // The dialog window fills the screen, so Android's window-outside detection
+            // cannot see taps above the sheet. Handle that area explicitly.
+            Box(
+                Modifier.matchParentSize()
+                    .testTag("sheet-scrim")
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClickLabel = "Dismiss $title",
+                        onClick = dismiss,
+                    )
+            )
             Surface(
                 Modifier.widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .heightIn(max = if (scrollContent) maxHeight * .92f else maxHeight),
+                    .heightIn(max = if (scrollContent) maxHeight * .92f else maxHeight)
+                    // Blank space inside the panel must not fall through to the backdrop.
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) },
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = Paper.Background,
             ) {

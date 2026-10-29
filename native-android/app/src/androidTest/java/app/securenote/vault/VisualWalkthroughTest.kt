@@ -108,12 +108,18 @@ class VisualWalkthroughTest {
             }
             step("file-type-overlay") {
                 home()
-                tool("File types").performClick()
+                rule.onNodeWithText("Others", substring = false).assertIsDisplayed()
+                tool("Other file types").performClick()
                 save("file-types-overlay")
+                rule.onNodeWithTag("sheet-scrim").performTouchInput {
+                    click(androidx.compose.ui.geometry.Offset(8f, 8f))
+                }
+                rule.onNodeWithTag("sheet-scrim").assertDoesNotExist()
+                tool("Other file types").performClick()
                 rule.onNodeWithTag("file-type-epub").performScrollTo().performClick()
                 rule.runOnIdle { assertTrue(model.category.value == "epub") }
                 save("file-type-active")
-                tool("File types").performClick()
+                tool("Other file types").performClick()
                 rule.onNodeWithTag("file-type-all").performScrollTo().performClick()
                 rule.runOnIdle { assertTrue(model.category.value == "all") }
             }
@@ -247,6 +253,10 @@ class VisualWalkthroughTest {
                 home()
                 rule.onNodeWithTag("add-item").performClick()
                 save("add-dialog")
+                rule.onNodeWithTag("sheet-scrim").performTouchInput {
+                    click(androidx.compose.ui.geometry.Offset(8f, 8f))
+                }
+                rule.onNodeWithText("Add item", substring = false).assertDoesNotExist()
             }
             step("search-keyboard") {
                 home()
@@ -261,6 +271,7 @@ class VisualWalkthroughTest {
             step("settings") {
                 home()
                 rule.onNodeWithTag("nav-settings").performClick()
+                rule.onNodeWithTag("settings-header").assertIsDisplayed()
                 save("settings-top")
                 rule.onNodeWithText("On this device", substring = false).performScrollTo()
                 save("settings-bottom")
@@ -547,6 +558,28 @@ class VisualWalkthroughTest {
                 waitText("Captions")
                 save("video-settings")
                 rule.onNodeWithContentDescription("Close", substring = false).performClick()
+                val initialVideoOrientation = rule.activity.resources.configuration.orientation
+                rule
+                    .onNodeWithContentDescription("Rotate video", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                rule.waitUntil(15000) {
+                    rule.activity.resources.configuration.orientation != initialVideoOrientation
+                }
+                rule.runOnIdle {
+                    assertTrue("Rotation must keep the vault unlocked", model.unlocked.value)
+                }
+                rule.waitUntil(15000) { model.playing }
+                save("video-rotated")
+                if (rule.onAllNodesWithTag("media-controls").fetchSemanticsNodes().isEmpty())
+                    rule.onNodeWithTag("video-picture").performClick()
+                rule
+                    .onNodeWithContentDescription("Rotate video", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                rule.waitUntil(15000) {
+                    rule.activity.resources.configuration.orientation == initialVideoOrientation
+                }
                 rule
                     .onNodeWithContentDescription("Full screen", substring = false)
                     .performScrollTo()
@@ -593,12 +626,22 @@ class VisualWalkthroughTest {
             step("lock-screen") {
                 home()
                 rule.runOnIdle { model.lock() }
+                rule.onNodeWithTag("welcome-header").assertIsDisplayed()
+                val welcomeHeaderTop =
+                    rule.onNodeWithTag("welcome-header").fetchSemanticsNode().boundsInWindow.top
                 save("lock-screen")
                 rule
                     .onNodeWithTag("vault-password")
                     .performScrollTo()
                     .performClick()
                     .assertIsFocused()
+                rule.onNodeWithTag("welcome-header").assertIsDisplayed()
+                val keyboardHeaderTop =
+                    rule.onNodeWithTag("welcome-header").fetchSemanticsNode().boundsInWindow.top
+                assertTrue(
+                    "Welcome header must stay pinned above the keyboard",
+                    kotlin.math.abs(keyboardHeaderTop - welcomeHeaderTop) < 2f,
+                )
                 rule.onNodeWithText("Welcome back.", substring = false).assertExists()
                 if (!landscape && font == 1f)
                     rule.onNodeWithText("Welcome back.", substring = false).assertIsDisplayed()

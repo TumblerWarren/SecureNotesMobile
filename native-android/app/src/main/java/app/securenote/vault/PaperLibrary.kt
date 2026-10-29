@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,6 +88,17 @@ fun PaperFileBadge(mime: String, modifier: Modifier = Modifier, name: String = "
 }
 
 @Composable
+private fun OthersButton(modifier: Modifier = Modifier, open: () -> Unit) {
+    TextButton(
+        open,
+        modifier.heightIn(min = 48.dp).semantics { contentDescription = "Other file types" },
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ) {
+        Text("Others", maxLines = 1)
+    }
+}
+
+@Composable
 fun PaperLibrary(
     model: VaultModel,
     state: LazyGridState,
@@ -96,6 +109,9 @@ fun PaperLibrary(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val chipStyle = MaterialTheme.typography.labelLarge
+    val othersWidth =
+        with(density) { measurer.measure("Others", chipStyle).size.width.toDp() + 24.dp }
+            .coerceAtLeast(64.dp)
     val cellWidth = if (density.fontScale > 1.5f) 220.dp else 136.dp
     val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
     val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -204,7 +220,7 @@ fun PaperLibrary(
                         if (query.isNotEmpty())
                             PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
                         if (short)
-                            PaperAction("File types", PaperGlyph.Add) {
+                            OthersButton(Modifier.width(othersWidth)) {
                                 inputFocus.clearFocus()
                                 inputKeyboard?.hide()
                                 types = true
@@ -334,13 +350,13 @@ fun PaperLibrary(
                     Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
                 search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
                 BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val available = with(density) { (maxWidth - 48.dp).toPx() }
+                    val available = with(density) { (maxWidth - othersWidth).toPx() }
                     val visible = mutableListOf<Pair<String, String>>()
                     var used = 0f
                     for (filter in filters.take(4)) {
                         val width =
                             measurer.measure(filter.second, chipStyle).size.width +
-                                with(density) { 40.dp.toPx() }
+                                with(density) { 38.dp.toPx() }
                         if (visible.isNotEmpty() && used + width > available) break
                         visible.add(filter)
                         used += width
@@ -364,7 +380,7 @@ fun PaperLibrary(
                                 shape = RoundedCornerShape(14.dp),
                             )
                         }
-                        PaperAction("File types", PaperGlyph.Add) {
+                        OthersButton(Modifier.width(othersWidth)) {
                             inputFocus.clearFocus()
                             inputKeyboard?.hide()
                             types = true

@@ -2,6 +2,10 @@
 
 package app.securenote.vault
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.view.SurfaceView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -40,6 +44,20 @@ import kotlinx.coroutines.*
 @Composable
 internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
     val context = LocalContext.current
+    val hostActivity = remember(context) { context.videoHostActivity() }
+    val initialOrientation = remember(hostActivity, id) { hostActivity?.requestedOrientation }
+    var rotated by remember(id) { mutableStateOf(false) }
+    DisposableEffect(hostActivity, id) {
+        onDispose {
+            if (
+                rotated &&
+                    hostActivity != null &&
+                    !hostActivity.isFinishing &&
+                    !hostActivity.isDestroyed
+            )
+                initialOrientation?.let { hostActivity.requestedOrientation = it }
+        }
+    }
     val audio = item.mime.startsWith("audio/")
     var error by remember(id) { mutableStateOf("") }
     var queue by remember(id) { mutableStateOf(emptyList<ItemSummary>()) }
@@ -353,6 +371,27 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                     PaperAction("Playback settings", PaperGlyph.Volume, Modifier.weight(1f)) {
                         settings = true
                     }
+                    if (!audio)
+                        PaperAction(
+                            "Rotate video",
+                            PaperGlyph.Rotate,
+                            Modifier.weight(1f),
+                            selected =
+                                orientation ==
+                                    android.content.res.Configuration.ORIENTATION_LANDSCAPE,
+                            enabled = hostActivity != null,
+                        ) {
+                            controlsVisible = true
+                            controlsInteraction++
+                            rotated = true
+                            hostActivity?.requestedOrientation =
+                                if (
+                                    orientation ==
+                                        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                                )
+                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                                else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        }
                     if (audio)
                         PaperAction(
                             "Sleep timer",
@@ -660,3 +699,10 @@ private fun AlbumArt(modifier: Modifier) {
         drawPath(front, Color(0xff294c40))
     }
 }
+
+private tailrec fun Context.videoHostActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.videoHostActivity()
+        else -> null
+    }
