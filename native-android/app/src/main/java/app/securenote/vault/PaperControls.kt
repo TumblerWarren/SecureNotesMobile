@@ -262,3 +262,25 @@ internal fun paperKeyboardVisible(): Boolean {
     return visible ||
         WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
 }
+
+/** Side rails preserve the full content height in landscape, including above the IME. */
+@Composable
+internal fun PaperTabLayout(
+    landscape: Boolean,
+    header: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+    navigation: @Composable () -> Unit,
+) {
+    if (landscape)
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(80.dp).fillMaxHeight().padding(4.dp)) { header() }
+            Box(Modifier.weight(1f).fillMaxHeight()) { content() }
+            Box(Modifier.width(64.dp).fillMaxHeight()) { navigation() }
+        }
+    else
+        Column(Modifier.fillMaxSize()) {
+            header()
+            Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+            navigation()
+        }
+}
