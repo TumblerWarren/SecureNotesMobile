@@ -2,5 +2,8 @@
     <application>
         <!-- Test APK only: serves fixed synthetic bytes, never device files. -->
         <provider android:name="app.securenote.vault.SyntheticFolderProvider" android:authorities="app.securenote.syntheticfolders" android:exported="true" android:grantUriPermissions="true" />
+        <provider android:name="app.securenote.vault.SyntheticTransferProvider" android:authorities="app.securenote.synthetictransfers" android:exported="true" android:grantUriPermissions="true">
+            <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+        </provider>
     </application>
 </manifest>
