@@ -216,8 +216,36 @@ internal fun VaultApp(model: VaultModel) {
             androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val compactHeader = !open && landscapeTabs
-        Column(Modifier.fillMaxSize()) {
-            if (!open || (recovery != null && !hideChrome)) {
+        if (!open && landscapeTabs) {
+            Surface(
+                Modifier.align(Alignment.CenterStart)
+                    .width(80.dp)
+                    .fillMaxHeight()
+                    .padding(4.dp)
+                    .testTag("welcome-header"),
+                color = Paper.Header,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, Paper.Line),
+            ) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Image(
+                        androidx.compose.ui.res.painterResource(R.drawable.ic_brand),
+                        null,
+                        Modifier.size(24.dp),
+                    )
+                    Text("SecureNote", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    PaperIcon(PaperGlyph.Lock, color = Paper.Muted)
+                }
+            }
+        }
+        Column(
+            Modifier.fillMaxSize().padding(start = if (!open && landscapeTabs) 80.dp else 0.dp)
+        ) {
+            if ((!open && !landscapeTabs) || (open && recovery != null && !hideChrome)) {
                 PaperHeader(
                     "SecureNote",
                     Modifier.testTag("welcome-header"),
