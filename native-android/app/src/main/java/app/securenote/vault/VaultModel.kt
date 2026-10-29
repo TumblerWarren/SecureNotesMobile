@@ -19,6 +19,126 @@ internal constructor(
 ) : AndroidViewModel(app) {
     constructor(app: Application) : this(app, VaultStore(app))
 
+    internal val originalsToDelete = MutableStateFlow<List<VerifiedOriginal>>(emptyList())
+    internal val exportRequest = MutableStateFlow<VaultExport?>(null)
+    internal val restoreRequest = MutableStateFlow<Uri?>(null)
+
+    fun requestExport(ids: List<String>) =
+        runWork("Prepare export") {
+            require(unlocked.value)
+            val selected = ids.distinct()
+            require(selected.isNotEmpty())
+            val item = checkNotNull(store.dao.display(selected.first()))
+            exportRequest.value =
+                VaultExport(
+                    selected,
+                    if (selected.size == 1 && item.mime != "application/x-securenote")
+                        VaultTransfers.safeName(item.name)
+                    else "SecureNote-export.zip",
+                    mime =
+                        if (selected.size == 1 && item.mime != "application/x-securenote") item.mime
+                        else "application/zip",
+                )
+        }
+
+    fun requestBackup() {
+        if (unlocked.value && !busy.value)
+            exportRequest.value =
+                VaultExport(emptyList(), "SecureNote-${System.currentTimeMillis()}.svault", true)
+    }
+
+    internal fun writeExport(uri: Uri?, plan: VaultExport) {
+        exportRequest.value = null
+        if (uri == null) return
+        runWork(if (plan.backup) "Encrypted backup" else "Export") {
+            require(unlocked.value) { "Unlock before exporting." }
+            withContext(Dispatchers.IO) {
+                var completed = false
+                try {
+                    val output =
+                        getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
+                            ?: error("Destination unavailable")
+                    output.use { stream ->
+                        val release = store.track(stream)
+                        try {
+                            VaultTransfers(getApplication(), store).export(plan, stream)
+                        } finally {
+                            release()
+                        }
+                    }
+                    completed = true
+                } finally {
+                    if (!completed)
+                        runCatching {
+                            android.provider.DocumentsContract.deleteDocument(
+                                getApplication<Application>().contentResolver,
+                                uri,
+                            )
+                        }
+                }
+            }
+            messageSuccess.value = true
+            message.value =
+                if (plan.backup) "Encrypted backup saved. Keep its password or recovery key safely."
+                else "Export saved outside the vault. This copy is not encrypted."
+        }
+    }
+
+    fun keepOriginals() {
+        originalsToDelete.value = emptyList()
+    }
+
+    fun deleteApprovedOriginals(ids: Set<String>) {
+        val approved = originalsToDelete.value.filter { it.id in ids }
+        originalsToDelete.value = emptyList()
+        runWork("Delete originals") {
+            val transfers = VaultTransfers(getApplication(), store)
+            var deleted = 0
+            for (receipt in approved) {
+                currentCoroutineContext().ensureActive()
+                try {
+                    if (transfers.deleteOriginal(receipt)) deleted++
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    store.checkSession()
+                }
+            }
+            messageSuccess.value = deleted == approved.size
+            message.value =
+                "$deleted originals deleted. ${approved.size - deleted} kept because verification or deletion permission failed. Vault copies remain intact."
+        }
+    }
+
+    fun restoreBackup(password: ByteArray, recoverySecret: ByteArray? = null) {
+        val source = restoreRequest.value
+        restoreRequest.value = null
+        if (source == null || busy.value || unlocked.value || store.exists) {
+            password.fill(0)
+            recoverySecret?.fill(0)
+            return
+        }
+        runWork("Restore backup") {
+            try {
+                withContext(Dispatchers.IO) {
+                    (getApplication<Application>().contentResolver.openInputStream(source)
+                            ?: error("Backup unavailable"))
+                        .use {
+                            store.restore(it, password, recoverySecret)
+                        }
+                }
+                messageSuccess.value = true
+                message.value =
+                    if (recoverySecret == null)
+                        "Backup restored. Unlock with the backup's password."
+                    else "Backup restored. Unlock with your new password."
+            } finally {
+                password.fill(0)
+                recoverySecret?.fill(0)
+            }
+        }
+    }
+
     val previews = Previews(app, store)
     val unlocked = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
@@ -82,7 +202,25 @@ internal constructor(
     }
 
     fun resumeImport(job: FolderImportJob) = runWork {
-        FolderImporter(getApplication(), store).run(job) { status.value = it }
+        val receipts = mutableListOf<VerifiedOriginal>()
+        try {
+            FolderImporter(getApplication(), store).run(
+                job,
+                { uri, id ->
+                    try {
+                        receipts.add(VaultTransfers(getApplication(), store).verify(uri, id))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        store.checkSession()
+                    }
+                },
+            ) {
+                status.value = it
+            }
+        } finally {
+            if (unlocked.value) originalsToDelete.value = receipts.toList()
+        }
     }
 
     fun cancelImport() {
@@ -556,34 +694,61 @@ internal constructor(
         val note = attachmentNote
         attachmentNote = null
         var lastUpdate = 0L
-        for (uri in list) {
-            val id =
-                store.import(uri, importDestination) { bytes ->
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    if (now - lastUpdate > 100) {
-                        status.value = "Importing ${bytes/1024} KiB"
-                        lastUpdate = now
+        val verified = mutableListOf<VerifiedOriginal>()
+        val transfers = VaultTransfers(getApplication(), store)
+        try {
+            for (uri in list) {
+                val id =
+                    store.import(uri, importDestination) { bytes ->
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now - lastUpdate > 100) {
+                            status.value = "Importing ${bytes/1024} KiB"
+                            lastUpdate = now
+                        }
                     }
+                currentCoroutineContext().ensureActive()
+                if (note != null) store.addBlock(note, "attachment", id)
+                try {
+                    verified.add(transfers.verify(uri, id))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    store.checkSession()
                 }
-            currentCoroutineContext().ensureActive()
-            if (note != null) store.addBlock(note, "attachment", id)
-        }
-        if (note != null && list.isNotEmpty()) screen.value = note
-        val tree = pendingTree
-        if (tree != null) {
-            pendingTree = null
-            val job =
-                FolderImportJob(
-                    java.util.UUID.randomUUID().toString(),
-                    tree.toString(),
-                    importDestination,
-                )
-            store.dao.putImportJob(job)
-            val failures = FolderImporter(getApplication(), store).run(job) { status.value = it }
-            messageSuccess.value = failures == 0
-            message.value =
-                if (failures == 0) "Folder imported. Originals remain outside the vault."
-                else "Some files could not be imported. Resume from Folders to retry."
+            }
+            if (note != null && list.isNotEmpty()) screen.value = note
+            val tree = pendingTree
+            if (tree != null) {
+                pendingTree = null
+                val job =
+                    FolderImportJob(
+                        java.util.UUID.randomUUID().toString(),
+                        tree.toString(),
+                        importDestination,
+                    )
+                store.dao.putImportJob(job)
+                val failures =
+                    FolderImporter(getApplication(), store).run(
+                        job,
+                        { uri, id ->
+                            try {
+                                verified.add(transfers.verify(uri, id))
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                store.checkSession()
+                            }
+                        },
+                    ) {
+                        status.value = it
+                    }
+                messageSuccess.value = failures == 0
+                message.value =
+                    if (failures == 0) "Folder imported. Originals remain outside the vault."
+                    else "Some files could not be imported. Resume from Folders to retry."
+            }
+        } finally {
+            if (unlocked.value) originalsToDelete.value = verified.toList()
         }
     }
 
@@ -694,6 +859,9 @@ internal constructor(
     fun pin(id: String) = runWork { store.dao.togglePin(id) }
 
     fun lock() {
+        originalsToDelete.value = emptyList()
+        exportRequest.value = null
+        restoreRequest.value = null
         pickerDeadline = 0L
         pickerTimeout?.cancel()
         pickerTimeout = null
