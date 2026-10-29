@@ -30,14 +30,36 @@ internal fun VaultTransferDialogs(model: VaultModel) {
             { model.keepOriginals() },
             scrollContent = false,
             footer = {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton({ model.keepOriginals() }) { Text("Keep originals") }
-                    TextButton(
-                        { model.deleteApprovedOriginals(selected) },
-                        enabled = selected.isNotEmpty(),
-                    ) {
-                        Text("Delete selected")
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    @Composable
+                    fun keep(modifier: Modifier) {
+                        TextButton({ model.keepOriginals() }, modifier = modifier) {
+                            Text("Keep originals")
+                        }
                     }
+                    @Composable
+                    fun remove(modifier: Modifier) {
+                        TextButton(
+                            { model.deleteApprovedOriginals(selected) },
+                            enabled = selected.isNotEmpty(),
+                            modifier = modifier,
+                        ) {
+                            Text("Delete selected")
+                        }
+                    }
+                    if (
+                        androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f ||
+                            maxWidth < 260.dp
+                    )
+                        Column(Modifier.fillMaxWidth()) {
+                            keep(Modifier.fillMaxWidth())
+                            remove(Modifier.fillMaxWidth())
+                        }
+                    else
+                        Row(Modifier.fillMaxWidth()) {
+                            keep(Modifier.weight(1f))
+                            remove(Modifier.weight(1f))
+                        }
                 }
             },
         ) {
