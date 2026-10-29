@@ -6,8 +6,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,28 +59,28 @@ fun SettingsDialog(
                 androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
                     android.content.res.Configuration.ORIENTATION_LANDSCAPE
         Surface(Modifier.fillMaxSize(), color = Paper.Background) {
-            Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().secureEditing()) {
+            Column(
+                Modifier.fillMaxSize()
+                    .safeDrawingPadding()
+                    .imePadding()
+                    .padding(start = 4.dp, end = 4.dp, top = 8.dp)
+                    .secureEditing()
+            ) {
                 if (!compactKeyboard)
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    PaperHeader(
+                        if (changing) "Change password" else "Settings",
+                        Modifier.testTag("settings-header"),
+                        leading = {
+                            PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
+                                if (changing) {
+                                    changing = false
+                                    clear()
+                                } else dismiss()
+                            }
+                        },
                     ) {
-                        PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
-                            if (changing) {
-                                changing = false
-                                clear()
-                            } else dismiss()
-                        }
-                        Text(
-                            if (changing) "Change password" else "Settings",
-                            Modifier.weight(1f).padding(horizontal = 8.dp),
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
                         PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
                     }
-                HorizontalDivider(color = Paper.Line)
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 Column(
                     Modifier.weight(1f)
