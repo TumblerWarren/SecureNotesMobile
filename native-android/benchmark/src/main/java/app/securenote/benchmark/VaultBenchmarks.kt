@@ -10,7 +10,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-private const val TARGET = "com.anonymous.SecureNotesMobile.benchmark"
+private const val TARGET = "app.securenote.vault.benchmark"
 
 @RunWith(AndroidJUnit4::class)
 class ColdStartupBenchmark {

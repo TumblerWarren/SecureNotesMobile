@@ -7,7 +7,7 @@ Production releases are built only from master after verify and visual-audit pas
 - ANDROID_SIGNING_KEY_ALIAS
 - ANDROID_SIGNING_KEY_PASSWORD
 
-Production application ID: `com.anonymous.SecureNotesMobile.vault`. The original app retains `com.anonymous.SecureNotesMobile`; preview and benchmark IDs remain unchanged. This separation prevents Android from treating a new-key vault APK as an incompatible update to the original app. Each app has separate private storage. Original vault data remains in the original app and is not automatically transferred.
+Production application ID: `app.securenote.vault`. The original app retains `com.anonymous.SecureNotesMobile`; preview and benchmark IDs use the new package prefix. This separation prevents Android from treating a new-key vault APK as an incompatible update to the original app. Each app has separate private storage. Existing data remains in its original app, including builds with the former .vault package, and is not automatically transferred. Restore an encrypted backup to migrate.
 
 The owner has authorized a new RSA-4096 key. Its private backup is provided separately, outside this repository. Keep that backup offline; future APK updates require the same signing key. A new key cannot update an app installed with a different certificate. Do not uninstall a vault containing data to work around a signature mismatch.
 

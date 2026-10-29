@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-EXPECTED_PACKAGE = 'com.anonymous.SecureNotesMobile.vault'
+EXPECTED_PACKAGE = 'app.securenote.vault'
 apk = pathlib.Path(sys.argv[1])
 aapt = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0/aapt'
 badging = subprocess.check_output([str(aapt), 'dump', 'badging', str(apk)], text=True)

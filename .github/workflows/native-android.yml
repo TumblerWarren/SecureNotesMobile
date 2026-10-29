@@ -286,7 +286,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "android-build-${ANDROID_BUILD_NUMBER}" signed-release/* --target "$GITHUB_SHA" --title "SecureNote 2.0.1 build ${ANDROID_BUILD_NUMBER}" --notes "Signed native Android vault release. Install the APK. Keep your vault password and recovery key safe; app data deletion cannot be recovered. This release uses the native app signing key and the separate com.anonymous.SecureNotesMobile.vault package. It installs beside the original app; original vault data remains in the original app and is not automatically transferred."
+          gh release create "android-build-${ANDROID_BUILD_NUMBER}" signed-release/* --target "$GITHUB_SHA" --title "SecureNote 2.0.1 build ${ANDROID_BUILD_NUMBER}" --notes "Signed native Android vault release. Install the APK. Keep your vault password and recovery key safe; app data deletion cannot be recovered. This release uses the native app signing key and the separate app.securenote.vault package. It installs separately from previous packages; existing vault data is not automatically transferred. Restore an encrypted backup to migrate."
       - name: Remove private signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/securenote-release.p12"
