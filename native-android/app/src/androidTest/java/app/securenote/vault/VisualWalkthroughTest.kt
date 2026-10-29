@@ -166,7 +166,7 @@ class VisualWalkthroughTest {
             }
             step("unfiled-move") {
                 home()
-                rule.onNodeWithTag("nav-folders").performClick()
+                navigateTab("folders")
                 if (landscape) {
                     tool("Sort").performClick()
                     rule.waitUntil(15000) {
@@ -270,19 +270,40 @@ class VisualWalkthroughTest {
             }
             step("settings") {
                 home()
-                rule.onNodeWithTag("nav-settings").performClick()
+                val footerTop =
+                    rule.onNodeWithTag("nav-all").fetchSemanticsNode().boundsInWindow.top
+                navigateTab("settings")
                 rule.onNodeWithTag("settings-header").assertIsDisplayed()
+                if (!landscape)
+                    assertTrue(
+                        "Settings must retain the shared footer position",
+                        kotlin.math.abs(
+                            rule.onNodeWithTag("nav-all").fetchSemanticsNode().boundsInWindow.top -
+                                footerTop
+                        ) < 2f,
+                    )
+                rule.onNodeWithTag("nav-settings").assertIsDisplayed().assertIsSelected()
+                rule.onNodeWithTag("nav-all").assertExists().assertIsNotSelected()
+                rule.onNodeWithTag("nav-notes").assertExists()
+                rule.onNodeWithTag("nav-folders").assertExists()
                 save("settings-top")
                 rule.onNodeWithText("On this device", substring = false).performScrollTo()
                 save("settings-bottom")
+                navigateTab("notes")
+                rule.onNodeWithTag("nav-notes").assertIsSelected()
+                rule.onNodeWithTag("vault-library").assertIsDisplayed()
+                navigateTab("settings")
+                rule.onNodeWithTag("nav-settings").assertIsSelected()
+                rule.onNodeWithTag("settings-header").assertIsDisplayed()
             }
             step("password-form") {
                 home()
-                rule.onNodeWithTag("nav-settings").performClick()
+                navigateTab("settings")
                 rule
                     .onNodeWithText("Change password", substring = false)
                     .performScrollTo()
                     .performClick()
+                rule.onNodeWithTag("nav-settings").assertIsDisplayed().assertIsSelected()
                 save("password-form")
                 rule.onNodeWithText("Current password", substring = false).performClick()
                 save("password-keyboard")
@@ -299,7 +320,7 @@ class VisualWalkthroughTest {
             }
             step("folders") {
                 home()
-                rule.onNodeWithTag("nav-folders").performClick()
+                navigateTab("folders")
                 waitText("Travel documents")
                 save("folders-top")
                 rule.onNodeWithText("Travel documents", substring = false).performClick()
@@ -307,7 +328,7 @@ class VisualWalkthroughTest {
             }
             step("folder-dialogs") {
                 home()
-                rule.onNodeWithTag("nav-folders").performClick()
+                navigateTab("folders")
                 waitText("Travel documents")
                 rule.onAllNodesWithContentDescription("Folder options").onLast().performClick()
                 save("folder-menu")
@@ -316,7 +337,7 @@ class VisualWalkthroughTest {
             }
             step("new-folder") {
                 home()
-                rule.onNodeWithTag("nav-folders").performClick()
+                navigateTab("folders")
                 rule.onNodeWithContentDescription("Sort", substring = false).performClick()
                 rule.onNodeWithText("New folder", substring = false).performClick()
                 save("new-folder")
@@ -627,9 +648,9 @@ class VisualWalkthroughTest {
                 home()
                 rule.runOnIdle { model.lock() }
                 rule.onNodeWithTag("welcome-header").assertIsDisplayed()
+                save("lock-screen")
                 val welcomeHeaderTop =
                     rule.onNodeWithTag("welcome-header").fetchSemanticsNode().boundsInWindow.top
-                save("lock-screen")
                 rule
                     .onNodeWithTag("vault-password")
                     .performScrollTo()
@@ -688,6 +709,12 @@ class VisualWalkthroughTest {
             File(context.noBackupFilesDir, directory).deleteRecursively()
         }
         assertTrue("Incomplete walkthrough states: ${failures.joinToString()}", failures.isEmpty())
+    }
+
+    private fun navigateTab(tab: String) {
+        val node = rule.onNodeWithTag("nav-$tab")
+        if (prefix == "landscape") node.performScrollTo()
+        node.performClick()
     }
 
     private fun home() {
@@ -830,7 +857,7 @@ class VisualWalkthroughTest {
                 "$name control extends to $bottom behind keyboard at ${inputViewport().bottom}",
                 bottom <= inputViewport().bottom + 2,
             )
-            if (name == "search-keyboard") rule.onNodeWithTag("nav-folders").assertDoesNotExist()
+            if (name == "search-keyboard") rule.onNodeWithTag("nav-folders").assertExists()
             else {
                 rule.onNodeWithContentDescription("Back", substring = false).assertDoesNotExist()
                 val editor = rule.onAllNodesWithTag("native-note-body").onFirst()

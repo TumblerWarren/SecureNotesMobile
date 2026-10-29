@@ -2,7 +2,7 @@ package app.securenote.vault
 
 import android.app.Application
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -30,7 +30,11 @@ class UsabilityLayoutTest {
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
-                PaperTheme { SettingsDialog(model, {}, {}, {}, {}) }
+                var changing by remember { mutableStateOf(false) }
+                val scroll = androidx.compose.foundation.rememberScrollState()
+                PaperTheme {
+                    SettingsContent(model, changing, { changing = it }, scroll, {}, {}, {})
+                }
             }
         }
         rule.onNodeWithText("Change password", substring = false).performScrollTo().performClick()
