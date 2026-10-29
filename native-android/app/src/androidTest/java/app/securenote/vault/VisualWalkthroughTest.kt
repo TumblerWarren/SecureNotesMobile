@@ -860,13 +860,29 @@ class VisualWalkthroughTest {
     }
 
     private fun hideKeyboard() {
+        lateinit var active: View
         instrumentation.runOnMainSync {
-            val view = rule.activity.window.decorView
+            val roots = WindowInspector.getGlobalWindowViews()
+            active =
+                roots.lastOrNull { it.hasWindowFocus() }
+                    ?: roots.lastOrNull { it.isShown }
+                    ?: rule.activity.window.decorView
             (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
                     as android.view.inputmethod.InputMethodManager)
-                .hideSoftInputFromWindow(view.windowToken, 0)
-            view.clearFocus()
+                .hideSoftInputFromWindow(active.windowToken, 0)
+            active.clearFocus()
         }
+        rule.waitUntil(5000) {
+            var visible = false
+            instrumentation.runOnMainSync {
+                val insets = androidx.core.view.ViewCompat.getRootWindowInsets(active)
+                val ime = androidx.core.view.WindowInsetsCompat.Type.ime()
+                visible =
+                    insets?.isVisible(ime) == true || (insets?.getInsets(ime)?.bottom ?: 0) > 0
+            }
+            !visible
+        }
+        rule.waitForIdle()
     }
 
     private fun findEditor(view: View): NoteEditText? {
