@@ -430,6 +430,9 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             checkNotNull(database).useWriterConnection { connection ->
                 connection.withTransaction(Transactor.SQLiteTransactionType.IMMEDIATE) {
                     java.util.zip.ZipOutputStream(output).use { zip ->
+                        // Ciphertext cannot be compressed usefully; avoid burning CPU on large
+                        // media.
+                        zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
                         zip.putNextEntry(java.util.zip.ZipEntry("format"))
                         zip.write("SecureNote encrypted vault v1".toByteArray())
                         zip.closeEntry()
