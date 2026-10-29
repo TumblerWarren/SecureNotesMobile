@@ -1,6 +1,6 @@
 # SecureNote Native Android
 
-Native Kotlin/Compose rewrite of SecureNotesMobile. All vault data stays local. The app has no network permission and provides its own Android-backed viewers, without external-view intents, plaintext export, sharing or printing.
+Native Kotlin/Compose rewrite of SecureNotesMobile. Vault data stays in app-private storage until the user chooses an export or backup destination. The app has no network permission and provides its own Android-backed viewers. Android document providers can receive explicit exports and encrypted backups.
 
 ## Features
 
@@ -14,7 +14,7 @@ Native Kotlin/Compose rewrite of SecureNotesMobile. All vault data stays local. 
 - Read-only legacy importer: decrypts the old database in an isolated process into memory, converts notes and embedded media, retains original HTML inside encrypted storage, and leaves the source untouched.
 - JVM security tests, Android functional/security/performance tests, a >4 GiB bounded-heap test, Macrobenchmark and profile generation tooling.
 
-Arbitrary files can be stored. Office document previews, password-protected PDFs and unsupported media codecs may not render internally. The app does not delete original plaintext files outside its vault. Recovery unlocks existing data; it cannot restore deleted files. See the [security contract](docs/SECURITY.md).
+Arbitrary files can be stored. Office document previews, password-protected PDFs and unsupported media codecs may not render internally. After a verified import, the app can request deletion of selected originals with user confirmation; provider deletion is not secure erasure. Exported copies are plaintext. Recovery unlocks existing data; it cannot restore missing data without a backup. See [vault transfers](docs/VAULT-TRANSFERS.md). See the [security contract](docs/SECURITY.md).
 
 ## Build
 
