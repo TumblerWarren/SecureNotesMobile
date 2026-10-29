@@ -126,6 +126,10 @@ internal fun VaultApp(model: VaultModel) {
     val attach by model.attachmentPicker.collectAsState()
     val recovery by model.recovery.collectAsState()
     var settings by remember { mutableStateOf(false) }
+    var passwordChanging by remember { mutableStateOf(false) }
+    val settingsScroll = rememberScrollState()
+    val passwordScroll = rememberScrollState()
+    LaunchedEffect(settings) { if (!settings) passwordChanging = false }
     var adding by remember { mutableStateOf(false) }
     fun openAdd() {
         focus.clearFocus()
@@ -185,8 +189,13 @@ internal fun VaultApp(model: VaultModel) {
     }
     val folderParent by model.folderId.collectAsState()
     val browsingFolders by model.folderBrowsing.collectAsState()
-    BackHandler(open && selected == null && browsingFolders && folderParent != null) {
+    BackHandler(open && !settings && selected == null && browsingFolders && folderParent != null) {
         model.folderUp()
+    }
+    BackHandler(open && settings && selected == null) {
+        focus.clearFocus()
+        keyboard?.hide()
+        if (passwordChanging) passwordChanging = false else settings = false
     }
     BackHandler(open && selected != null) {
         focus.clearFocus()
@@ -333,78 +342,150 @@ internal fun VaultApp(model: VaultModel) {
                 selected != null ->
                     Box(Modifier.weight(1f).fillMaxWidth()) { ItemScreen(model, selected!!) }
                 else -> {
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        PaperLibrary(model, libraryState, { selectingFiles = it }) { openAdd() }
-                    }
-                    if (!hideChrome && !selectingFiles) {
-                        HorizontalDivider(color = Paper.Line)
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .background(Paper.Background)
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            listOf(
-                                    Triple("all", "Vault", PaperGlyph.Shield),
-                                    Triple("notes", "Notes", PaperGlyph.Note),
-                                    Triple("folders", "Folders", PaperGlyph.Vault),
-                                    Triple("settings", "Settings", PaperGlyph.Settings),
-                                )
-                                .forEach { (key, label, glyph) ->
-                                    val active =
-                                        if (key == "all")
-                                            !model.folderBrowsing.collectAsState().value &&
-                                                category == "all"
-                                        else if (key == "folders")
-                                            model.folderBrowsing.collectAsState().value
-                                        else category == key
-                                    TextButton(
-                                        {
-                                            if (key == "settings") settings = true
-                                            else if (key == "folders") model.openFolder(null)
-                                            else {
-                                                model.folderBrowsing.value = false
-                                                model.showLibrary(key)
+                    PaperLibrary(
+                        model,
+                        libraryState,
+                        { selectingFiles = it },
+                        layout = { libraryHeader, libraryContent ->
+                            Column(Modifier.fillMaxSize()) {
+                                PaperTabHeader(
+                                    if (settings) Modifier.testTag("settings-header") else Modifier
+                                ) {
+                                    if (settings) {
+                                        if (passwordChanging)
+                                            PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
+                                                focus.clearFocus()
+                                                keyboard?.hide()
+                                                passwordChanging = false
                                             }
-                                        },
-                                        modifier =
-                                            Modifier.weight(1f).testTag("nav-$key").semantics {
-                                                this.selected = active
-                                                contentDescription = label
+                                        Text(
+                                            if (passwordChanging) "Change password" else "Settings",
+                                            Modifier.weight(1f).padding(horizontal = 12.dp),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
+                                    } else libraryHeader()
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    if (settings)
+                                        SettingsContent(
+                                            model,
+                                            passwordChanging,
+                                            { passwordChanging = it },
+                                            if (passwordChanging) passwordScroll
+                                            else settingsScroll,
+                                            {
+                                                launchDocumentPicker {
+                                                    oldPicker.launch(arrayOf("*/*"))
+                                                }
                                             },
-                                        contentPadding =
-                                            PaddingValues(vertical = 8.dp, horizontal = 0.dp),
+                                            {
+                                                model.prepareImport()
+                                                launchDocumentPicker {
+                                                    picker.launch(arrayOf("*/*"))
+                                                }
+                                            },
+                                            {
+                                                model.prepareImport()
+                                                launchDocumentPicker { treePicker.launch(null) }
+                                            },
+                                        )
+                                    else libraryContent()
+                                }
+                                if (!hideChrome && !selectingFiles) {
+                                    HorizontalDivider(color = Paper.Line)
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .background(Paper.Background)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Box(
-                                                Modifier.size(48.dp, 28.dp)
-                                                    .background(
-                                                        if (active) Paper.AccentSoft
-                                                        else Color.Transparent,
-                                                        RoundedCornerShape(14.dp),
-                                                    ),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                PaperIcon(
-                                                    glyph,
-                                                    color =
-                                                        if (active) Paper.Accent else Paper.Muted,
-                                                )
+                                        listOf(
+                                                Triple("all", "Vault", PaperGlyph.Shield),
+                                                Triple("notes", "Notes", PaperGlyph.Note),
+                                                Triple("folders", "Folders", PaperGlyph.Vault),
+                                                Triple("settings", "Settings", PaperGlyph.Settings),
+                                            )
+                                            .forEach { (key, label, glyph) ->
+                                                val active =
+                                                    if (key == "settings") settings
+                                                    else
+                                                        !settings &&
+                                                            when (key) {
+                                                                "all" ->
+                                                                    !browsingFolders &&
+                                                                        category == "all"
+                                                                "folders" -> browsingFolders
+                                                                else ->
+                                                                    !browsingFolders &&
+                                                                        category == key
+                                                            }
+                                                TextButton(
+                                                    {
+                                                        focus.clearFocus()
+                                                        keyboard?.hide()
+                                                        settings = key == "settings"
+                                                        if (key == "folders") model.openFolder(null)
+                                                        else if (key != "settings") {
+                                                            model.folderBrowsing.value = false
+                                                            model.showLibrary(key)
+                                                        }
+                                                    },
+                                                    modifier =
+                                                        Modifier.weight(1f)
+                                                            .testTag("nav-$key")
+                                                            .semantics {
+                                                                this.selected = active
+                                                                contentDescription = label
+                                                            },
+                                                    contentPadding =
+                                                        PaddingValues(
+                                                            vertical = 8.dp,
+                                                            horizontal = 0.dp,
+                                                        ),
+                                                ) {
+                                                    Column(
+                                                        horizontalAlignment =
+                                                            Alignment.CenterHorizontally,
+                                                        verticalArrangement =
+                                                            Arrangement.spacedBy(4.dp),
+                                                    ) {
+                                                        Box(
+                                                            Modifier.size(48.dp, 28.dp)
+                                                                .background(
+                                                                    if (active) Paper.AccentSoft
+                                                                    else Color.Transparent,
+                                                                    RoundedCornerShape(14.dp),
+                                                                ),
+                                                            contentAlignment = Alignment.Center,
+                                                        ) {
+                                                            PaperIcon(
+                                                                glyph,
+                                                                color =
+                                                                    if (active) Paper.Accent
+                                                                    else Paper.Muted,
+                                                            )
+                                                        }
+                                                        if (navigationLabels)
+                                                            Text(
+                                                                label,
+                                                                color =
+                                                                    if (active) Paper.Accent
+                                                                    else Paper.Muted,
+                                                                style =
+                                                                    MaterialTheme.typography
+                                                                        .labelSmall,
+                                                            )
+                                                    }
+                                                }
                                             }
-                                            if (navigationLabels)
-                                                Text(
-                                                    label,
-                                                    color =
-                                                        if (active) Paper.Accent else Paper.Muted,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                )
-                                        }
                                     }
                                 }
-                        }
-                    }
+                            }
+                        },
+                        onAdd = { openAdd() },
+                    )
                 }
             }
         }
@@ -453,25 +534,6 @@ internal fun VaultApp(model: VaultModel) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
-        if (settings)
-            SettingsDialog(
-                model,
-                { settings = false },
-                {
-                    settings = false
-                    launchDocumentPicker { oldPicker.launch(arrayOf("*/*")) }
-                },
-                {
-                    settings = false
-                    model.prepareImport()
-                    launchDocumentPicker { picker.launch(arrayOf("*/*")) }
-                },
-                {
-                    settings = false
-                    model.prepareImport()
-                    launchDocumentPicker { treePicker.launch(null) }
-                },
-            )
         if (legacySource != null) LegacyPasswordDialog(model)
     }
 }
