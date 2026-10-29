@@ -108,10 +108,10 @@ class VaultTransferTest {
                     zip.closeEntry()
                 }
             }
-            assertArrayEquals(bytes, exportedEntries["$id/private-image.png"])
-            assertArrayEquals(bytes, exportedEntries["$note/attachments/$id/private-image.png"])
+            assertArrayEquals(bytes, exportedEntries["private-image.png"])
+            assertArrayEquals(bytes, exportedEntries["Untitled/attachments/private-image.png"])
             assertTrue(
-                String(checkNotNull(exportedEntries["$note/note.json"]))
+                String(checkNotNull(exportedEntries["Untitled/note.json"]))
                     .contains("Private note content")
             )
             val output = ByteArrayOutputStream()
