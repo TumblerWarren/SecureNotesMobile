@@ -7,24 +7,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.*
 
 @Composable
-fun SettingsDialog(
+fun SettingsContent(
     model: VaultModel,
-    dismiss: () -> Unit,
+    changing: Boolean,
+    onChanging: (Boolean) -> Unit,
+    scrollState: androidx.compose.foundation.ScrollState,
     legacy: () -> Unit,
     files: () -> Unit,
     folder: () -> Unit,
 ) {
     val busy by model.busy.collectAsState()
     val result by model.passwordResult.collectAsState()
-    var changing by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<String?>(null) }
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
@@ -37,181 +36,144 @@ fun SettingsDialog(
     LaunchedEffect(result) {
         if (result == "success") {
             clear()
-            changing = false
+            onChanging(false)
             model.passwordResult.value = null
         }
     }
-    Dialog(
-        onDismissRequest = { if (!busy) dismiss() },
-        properties =
-            DialogProperties(
-                usePlatformDefaultWidth = false,
-                securePolicy = SecureFlagPolicy.SecureOn,
-                decorFitsSystemWindows = false,
-            ),
-    ) {
-        PaperDialogBars()
-        val keyboardOpen = paperKeyboardVisible()
-        val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
-        val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-        val compactKeyboard =
-            keyboardOpen &&
-                androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
-                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        Surface(Modifier.fillMaxSize(), color = Paper.Background) {
-            Column(
-                Modifier.fillMaxSize()
-                    .safeDrawingPadding()
-                    .imePadding()
-                    .padding(start = 4.dp, end = 4.dp, top = 8.dp)
-                    .secureEditing()
-            ) {
-                if (!compactKeyboard)
-                    PaperHeader(
-                        if (changing) "Change password" else "Settings",
-                        Modifier.testTag("settings-header"),
-                        leading = {
-                            PaperAction("Back", PaperGlyph.Back, enabled = !busy) {
-                                if (changing) {
-                                    changing = false
-                                    clear()
-                                } else dismiss()
+    val keyboardOpen = paperKeyboardVisible()
+    val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
+    val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val compactKeyboard =
+        keyboardOpen &&
+            androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    LaunchedEffect(changing) { if (!changing) clear() }
+    Column(Modifier.fillMaxSize().secureEditing()) {
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Column(
+            Modifier.weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = if (changing) 16.dp else 8.dp,
+                    vertical = if (compactKeyboard) 4.dp else if (changing) 16.dp else 8.dp,
+                )
+        ) {
+            if (changing) {
+                if (!keyboardOpen)
+                    Text(
+                        "At least 16 characters.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Paper.Muted,
+                    )
+                if (!keyboardOpen) Spacer(Modifier.height(12.dp))
+                listOf("Current password", "New password", "Confirm password").forEachIndexed {
+                    index,
+                    label ->
+                    OutlinedTextField(
+                        when (index) {
+                            0 -> current
+                            1 -> next
+                            else -> confirm
+                        },
+                        {
+                            when (index) {
+                                0 -> current = it
+                                1 -> next = it
+                                else -> confirm = it
                             }
                         },
-                    ) {
-                        PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
-                    }
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                Column(
-                    Modifier.weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(
-                            horizontal = if (changing) 16.dp else 8.dp,
-                            vertical = if (compactKeyboard) 4.dp else if (changing) 16.dp else 8.dp,
-                        )
+                        label = {
+                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        singleLine = true,
+                        keyboardOptions =
+                            KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction =
+                                    if (index < 2) androidx.compose.ui.text.input.ImeAction.Next
+                                    else androidx.compose.ui.text.input.ImeAction.Done,
+                            ),
+                        keyboardActions =
+                            androidx.compose.foundation.text.KeyboardActions(
+                                onNext = {
+                                    inputFocus.moveFocus(
+                                        androidx.compose.ui.focus.FocusDirection.Next
+                                    )
+                                },
+                                onDone = {
+                                    inputFocus.clearFocus()
+                                    inputKeyboard?.hide()
+                                },
+                            ),
+                        visualTransformation = PasswordVisualTransformation(),
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().keepInputVisible(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                if (confirm.isNotEmpty() && next != confirm)
+                    Text("Passwords do not match.", color = MaterialTheme.colorScheme.error)
+                if (result != null && result != "success")
+                    Text(result!!, color = MaterialTheme.colorScheme.error)
+                Button(
+                    { model.changePassword(current.toByteArray(), next.toByteArray()) },
+                    enabled = !busy && current.isNotEmpty() && next.length >= 16 && next == confirm,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    if (changing) {
-                        if (!keyboardOpen)
-                            Text(
-                                "At least 16 characters.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Paper.Muted,
-                            )
-                        if (!keyboardOpen) Spacer(Modifier.height(12.dp))
-                        listOf("Current password", "New password", "Confirm password")
-                            .forEachIndexed { index, label ->
-                                OutlinedTextField(
-                                    when (index) {
-                                        0 -> current
-                                        1 -> next
-                                        else -> confirm
-                                    },
-                                    {
-                                        when (index) {
-                                            0 -> current = it
-                                            1 -> next = it
-                                            else -> confirm = it
-                                        }
-                                    },
-                                    label = {
-                                        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    },
-                                    singleLine = true,
-                                    keyboardOptions =
-                                        KeyboardOptions(
-                                            keyboardType = KeyboardType.Password,
-                                            imeAction =
-                                                if (index < 2)
-                                                    androidx.compose.ui.text.input.ImeAction.Next
-                                                else androidx.compose.ui.text.input.ImeAction.Done,
-                                        ),
-                                    keyboardActions =
-                                        androidx.compose.foundation.text.KeyboardActions(
-                                            onNext = {
-                                                inputFocus.moveFocus(
-                                                    androidx.compose.ui.focus.FocusDirection.Next
-                                                )
-                                            },
-                                            onDone = {
-                                                inputFocus.clearFocus()
-                                                inputKeyboard?.hide()
-                                            },
-                                        ),
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    enabled = !busy,
-                                    modifier = Modifier.fillMaxWidth().keepInputVisible(),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                            }
-                        if (confirm.isNotEmpty() && next != confirm)
-                            Text("Passwords do not match.", color = MaterialTheme.colorScheme.error)
-                        if (result != null && result != "success")
-                            Text(result!!, color = MaterialTheme.colorScheme.error)
-                        Button(
-                            { model.changePassword(current.toByteArray(), next.toByteArray()) },
-                            enabled =
-                                !busy &&
-                                    current.isNotEmpty() &&
-                                    next.length >= 16 &&
-                                    next == confirm,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        ) {
-                            Text(if (busy) "Changing…" else "Save password")
-                        }
-                    } else {
-                        SettingsHeading("Security")
-                        SettingsRow(
-                            "Change password",
-                            "Update your vault password",
-                            PaperGlyph.Lock,
-                            !busy,
-                        ) {
-                            model.passwordResult.value = null
-                            changing = true
-                        }
-                        SettingsRow(
-                            "Auto-lock",
-                            "On leaving · 5 minutes idle",
-                            PaperGlyph.Timer,
-                            !busy,
-                        ) {
-                            details = "Auto-lock"
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        SettingsHeading("Import & storage")
-                        SettingsRow(
-                            "Import files",
-                            "Add encrypted copies",
-                            PaperGlyph.Import,
-                            !busy,
-                            files,
-                        )
-                        SettingsRow(
-                            "Import folder",
-                            "Include subfolders",
-                            PaperGlyph.Vault,
-                            !busy,
-                            folder,
-                        )
-                        SettingsRow(
-                            "Import old database",
-                            "Bring notes from an earlier vault",
-                            PaperGlyph.Note,
-                            !busy,
-                            legacy,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        SettingsHeading("On this device")
-                        SettingsRow(
-                            "Storage & recovery",
-                            "Originals, backups and recovery keys",
-                            PaperGlyph.Shield,
-                            true,
-                        ) {
-                            details = "Storage & recovery"
-                        }
-                    }
+                    Text(if (busy) "Changing…" else "Save password")
+                }
+            } else {
+                SettingsHeading("Security")
+                SettingsRow(
+                    "Change password",
+                    "Update your vault password",
+                    PaperGlyph.Lock,
+                    !busy,
+                ) {
+                    model.passwordResult.value = null
+                    onChanging(true)
+                }
+                SettingsRow(
+                    "Auto-lock",
+                    "On leaving · 5 minutes idle",
+                    PaperGlyph.Timer,
+                    !busy,
+                ) {
+                    details = "Auto-lock"
+                }
+                Spacer(Modifier.height(12.dp))
+                SettingsHeading("Import & storage")
+                SettingsRow(
+                    "Import files",
+                    "Add encrypted copies",
+                    PaperGlyph.Import,
+                    !busy,
+                    files,
+                )
+                SettingsRow(
+                    "Import folder",
+                    "Include subfolders",
+                    PaperGlyph.Vault,
+                    !busy,
+                    folder,
+                )
+                SettingsRow(
+                    "Import old database",
+                    "Bring notes from an earlier vault",
+                    PaperGlyph.Note,
+                    !busy,
+                    legacy,
+                )
+                Spacer(Modifier.height(12.dp))
+                SettingsHeading("On this device")
+                SettingsRow(
+                    "Storage & recovery",
+                    "Originals, backups and recovery keys",
+                    PaperGlyph.Shield,
+                    true,
+                ) {
+                    details = "Storage & recovery"
                 }
             }
         }
