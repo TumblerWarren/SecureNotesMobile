@@ -5,5 +5,8 @@
         <provider android:name="app.securenote.vault.SyntheticTransferProvider" android:authorities="app.securenote.synthetictransfers" android:exported="true" android:grantUriPermissions="true">
             <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
         </provider>
+        <provider android:name="app.securenote.vault.SyntheticExportProvider" android:authorities="app.securenote.syntheticexports" android:exported="true" android:grantUriPermissions="true">
+            <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+        </provider>
     </application>
 </manifest>
