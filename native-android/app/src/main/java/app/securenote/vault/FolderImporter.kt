@@ -19,7 +19,11 @@ internal class FolderImporter(private val context: Context, private val store: V
         val modified: Long,
     )
 
-    suspend fun run(job: FolderImportJob, progress: (String) -> Unit) =
+    suspend fun run(
+        job: FolderImportJob,
+        verified: suspend (Uri, String) -> Unit = { _, _ -> },
+        progress: (String) -> Unit,
+    ) =
         withContext(Dispatchers.IO) {
             val dao = store.dao
             val tree = Uri.parse(job.source)
@@ -122,6 +126,7 @@ internal class FolderImporter(private val context: Context, private val store: V
                                 putImportEntry(FolderImportEntry(job.id, doc.id, result, signature))
                                 putImportJob(job.copy(completed = completed + 1, failed = failed))
                             }
+                        verified(document(doc.id), checkNotNull(id))
                         completed++
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
@@ -135,12 +140,6 @@ internal class FolderImporter(private val context: Context, private val store: V
             }
             if (failed == 0) {
                 dao.deleteImportJob(job.id)
-                runCatching {
-                    resolver.releasePersistableUriPermission(
-                        tree,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    )
-                }
             }
             progress(
                 "Imported $completed files" +
