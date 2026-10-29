@@ -306,7 +306,18 @@ class VisualWalkthroughTest {
                 rule.runOnIdle { model.requestExport(listOf(ids.getValue("image"))) }
                 waitText("Export unencrypted copy?")
                 rule.onNodeWithText("Choose destination").assertIsDisplayed()
+                if (!landscape) {
+                    rule.onNodeWithText("Files", substring = false).assertIsDisplayed()
+                    rule.onNodeWithText("ZIP archive", substring = false).assertIsDisplayed()
+                }
                 save("decrypted-export-confirmation")
+                rule.onNodeWithText("Files", substring = false).assertIsSelected()
+                rule
+                    .onNodeWithText("ZIP archive", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsSelected()
+                save("zip-export-confirmation")
                 tool("Close").performClick()
                 rule.runOnIdle {
                     model.originalsToDelete.value =

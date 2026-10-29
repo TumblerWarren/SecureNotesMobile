@@ -32,12 +32,10 @@ internal constructor(
             exportRequest.value =
                 VaultExport(
                     selected,
-                    if (selected.size == 1 && item.mime != "application/x-securenote")
-                        VaultTransfers.safeName(item.name)
-                    else "SecureNote-export.zip",
-                    mime =
-                        if (selected.size == 1 && item.mime != "application/x-securenote") item.mime
-                        else "application/zip",
+                    if (selected.size == 1) VaultTransfers.safeName(item.name)
+                    else "SecureNote-export",
+                    mime = item.mime,
+                    folder = selected.size > 1 || item.mime == "application/x-securenote",
                 )
         }
 
@@ -81,6 +79,18 @@ internal constructor(
             message.value =
                 if (plan.backup) "Encrypted backup saved. Keep its password or recovery key safely."
                 else "Export saved outside the vault. This copy is not encrypted."
+        }
+    }
+
+    internal fun writeFolderExport(uri: Uri?, plan: VaultExport) {
+        exportRequest.value = null
+        if (uri == null) return
+        runWork("Export files") {
+            require(unlocked.value) { "Unlock before exporting." }
+            VaultTransfers(getApplication(), store).exportFolder(plan, uri)
+            messageSuccess.value = true
+            message.value =
+                "Export saved to your chosen folder. Copies outside the vault are not encrypted."
         }
     }
 

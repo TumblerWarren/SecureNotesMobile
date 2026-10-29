@@ -3,10 +3,13 @@ package app.securenote.vault
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,6 +29,20 @@ internal fun VaultTransferDialogs(model: VaultModel) {
             model.finishDocumentPicker()
             if (plan != null) model.writeExport(uri, plan)
         }
+    val folderExporter =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            val plan = model.exportRequest.value
+            model.finishDocumentPicker()
+            if (plan != null) model.writeFolderExport(uri, plan)
+        }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(export) {
+        if (export != null) {
+            focus.clearFocus()
+            keyboard?.hide()
+        }
+    }
     if (open && !busy && originals.isNotEmpty()) {
         var selected by remember(originals) { mutableStateOf(originals.map { it.id }.toSet()) }
         PaperSheet(
@@ -91,6 +108,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
         }
     }
     export?.let { plan ->
+        var archive by remember(plan.ids, plan.backup) { mutableStateOf(plan.archive) }
         if (open && !busy)
             PaperSheet(
                 if (plan.backup) "Encrypted backup" else "Export unencrypted copy?",
@@ -99,7 +117,22 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                     TextButton({
                         if (model.beginDocumentPicker()) {
                             try {
-                                exporter.launch(plan)
+                                val chosen =
+                                    if (!plan.backup && archive)
+                                        plan.copy(
+                                            archive = true,
+                                            folder = false,
+                                            mime = "application/zip",
+                                            name =
+                                                if (plan.ids.size == 1)
+                                                    plan.name.substringBeforeLast('.', plan.name) +
+                                                        ".zip"
+                                                else "SecureNote-export.zip",
+                                        )
+                                    else plan.copy(archive = false)
+                                model.exportRequest.value = chosen
+                                if (chosen.folder && !chosen.backup) folderExporter.launch(null)
+                                else exporter.launch(chosen)
                             } catch (_: Exception) {
                                 model.finishDocumentPicker()
                                 model.exportRequest.value = null
@@ -114,9 +147,32 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                 Text(
                     if (plan.backup)
                         "Save your encrypted vault locally or to a cloud provider shown in the file picker. Restore requires the password valid when this backup is created, or its recovery key. This is a snapshot, not automatic cloud sync."
-                    else
-                        "This copy can be read by other apps and anyone with access to its destination. The vault copy stays encrypted. Notes export as a ZIP containing structured note data, drawings and attachments."
+                    else "Copies are unencrypted. Duplicate names get a number."
                 )
+                if (!plan.backup)
+                    Column(Modifier.fillMaxWidth().selectableGroup()) {
+                        listOf(false to "Files", true to "ZIP archive").forEach { (value, label) ->
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .selectable(
+                                        selected = archive == value,
+                                        role = Role.RadioButton,
+                                        onClick = { archive = value },
+                                    ),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = archive == value,
+                                    onClick = null,
+                                    modifier = Modifier.padding(8.dp),
+                                )
+                                Text(label, Modifier.weight(1f))
+                            }
+                        }
+                    }
+                if (!plan.backup && plan.mime == "application/x-securenote")
+                    Text("Notes use a named folder containing note data and attachments.")
             }
     }
     restore?.let { source ->

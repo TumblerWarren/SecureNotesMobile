@@ -3,6 +3,7 @@ package app.securenote.vault
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import app.securenote.vault.core.ExportNames
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -24,6 +25,8 @@ internal data class VaultExport(
     val name: String,
     val backup: Boolean = false,
     val mime: String = "application/zip",
+    val folder: Boolean = false,
+    val archive: Boolean = false,
 )
 
 /** Every plaintext buffer is bounded and discarded; no plaintext staging file is used. */
@@ -118,79 +121,115 @@ internal class VaultTransfers(private val context: Context, private val store: V
 
     suspend fun export(plan: VaultExport, output: OutputStream) =
         withContext(Dispatchers.IO) {
+            store.checkSession()
             if (plan.backup) {
                 store.backup(output)
                 return@withContext
             }
             val first = checkNotNull(store.dao.display(plan.ids.first()))
-            if (plan.ids.size == 1 && first.mime != "application/x-securenote") {
+            if (!plan.archive && plan.ids.size == 1 && first.mime != "application/x-securenote") {
                 copyFile(first.id, output)
                 return@withContext
             }
-            ZipOutputStream(output).use { zip ->
-                for (id in plan.ids.distinct()) {
-                    ensureActive()
-                    store.checkSession()
-                    val item = checkNotNull(store.dao.display(id))
-                    val base = "$id/"
-                    if (item.mime != "application/x-securenote") {
-                        zip.putNextEntry(ZipEntry(base + safeName(item.name)))
-                        copyFile(id, zip)
-                        zip.closeEntry()
-                    } else {
-                        store.ensureBlocks(id)
-                        val blocks = JSONArray()
-                        val attachments = mutableSetOf<String>()
-                        for (block in store.dao.blocks(id)) {
-                            val value =
-                                JSONObject()
-                                    .put("id", block.id)
-                                    .put("kind", block.kind)
-                                    .put("content", block.content)
-                            if (block.kind == "drawing") {
-                                val strokes = JSONArray()
-                                store.dao.drawingStrokes(block.id).forEach {
-                                    strokes.put(
-                                        JSONObject().put("id", it.id).put("content", it.content)
-                                    )
-                                }
-                                value.put("strokes", strokes)
-                            }
-                            if (block.kind == "attachment") attachments.add(block.content)
-                            blocks.put(value)
-                        }
-                        val note =
-                            JSONObject()
-                                .put("format", "SecureNote note export v1")
-                                .put("title", item.name)
-                                .put("blocks", blocks)
-                        zip.putNextEntry(ZipEntry(base + "note.json"))
-                        val bytes = note.toString(2).toByteArray()
-                        try {
-                            zip.write(bytes)
-                        } finally {
-                            bytes.fill(0)
-                        }
-                        zip.closeEntry()
-                        for (attachment in attachments) {
-                            val file = checkNotNull(store.dao.display(attachment))
-                            zip.putNextEntry(
-                                ZipEntry(base + "attachments/$attachment/" + safeName(file.name))
-                            )
-                            copyFile(attachment, zip)
-                            zip.closeEntry()
-                        }
-                    }
-                }
-            }
+            ZipOutputStream(output).use { zip -> writeSelection(plan, Archive(zip)) }
         }
 
+    suspend fun exportFolder(plan: VaultExport, tree: Uri) =
+        withContext(Dispatchers.IO) {
+            require(!plan.backup && !plan.archive)
+            DocumentExport(context, store).run(tree) { writeSelection(plan, it) }
+        }
+
+    private suspend fun writeSelection(plan: VaultExport, target: ExportTarget) {
+        require(plan.ids.isNotEmpty())
+        for (id in plan.ids.distinct()) {
+            currentCoroutineContext().ensureActive()
+            store.checkSession()
+            val item = checkNotNull(store.dao.display(id))
+            if (item.mime == "application/x-securenote")
+                writeNote(id, item.name, target.directory(item.name))
+            else target.file(item.name, item.mime) { copyFile(id, it) }
+        }
+    }
+
+    private suspend fun writeNote(id: String, title: String, target: ExportTarget) {
+        store.ensureBlocks(id)
+        val sourceBlocks = store.dao.blocks(id)
+        val attachments =
+            sourceBlocks.filter { it.kind == "attachment" }.map { it.content }.distinct()
+        val paths = mutableMapOf<String, String>()
+        if (attachments.isNotEmpty()) {
+            val destination = target.directory("attachments")
+            for (attachment in attachments) {
+                val item = checkNotNull(store.dao.display(attachment))
+                val name = destination.file(item.name, item.mime) { copyFile(attachment, it) }
+                paths[attachment] = "${destination.name}/$name"
+            }
+        }
+        val blocks = JSONArray()
+        for (block in sourceBlocks) {
+            currentCoroutineContext().ensureActive()
+            store.checkSession()
+            val value =
+                JSONObject()
+                    .put("id", block.id)
+                    .put("kind", block.kind)
+                    .put("content", block.content)
+            if (block.kind == "attachment") value.put("file", paths.getValue(block.content))
+            if (block.kind == "drawing") {
+                val strokes = JSONArray()
+                store.dao.drawingStrokes(block.id).forEach {
+                    strokes.put(JSONObject().put("id", it.id).put("content", it.content))
+                }
+                value.put("strokes", strokes)
+            }
+            blocks.put(value)
+        }
+        val note =
+            JSONObject()
+                .put("format", "SecureNote note export v1")
+                .put("title", title)
+                .put("blocks", blocks)
+        target.file("note.json", "application/json") { output ->
+            val bytes = note.toString(2).toByteArray()
+            try {
+                output.write(bytes)
+            } finally {
+                bytes.fill(0)
+            }
+        }
+    }
+
+    private inner class Archive(
+        private val zip: ZipOutputStream,
+        private val prefix: String = "",
+        override val name: String = "",
+    ) : ExportTarget {
+        private val names = ExportNames()
+
+        override suspend fun directory(preferred: String): ExportTarget {
+            store.checkSession()
+            val folder = names.reserve(preferred, directory = true)
+            return Archive(zip, "$prefix$folder/", folder)
+        }
+
+        override suspend fun file(
+            preferred: String,
+            mime: String,
+            write: suspend (OutputStream) -> Unit,
+        ): String {
+            currentCoroutineContext().ensureActive()
+            store.checkSession()
+            val name = names.reserve(preferred)
+            zip.putNextEntry(ZipEntry(prefix + name))
+            write(zip)
+            store.checkSession()
+            zip.closeEntry()
+            return name
+        }
+    }
+
     companion object {
-        fun safeName(name: String) =
-            name
-                .replace(Regex("[\\\\/\\p{Cntrl}]"), "_")
-                .take(180)
-                .ifBlank { "file" }
-                .let { if (it == "." || it == "..") "file" else it }
+        fun safeName(name: String) = ExportNames.safe(name)
     }
 }
