@@ -24,7 +24,8 @@ internal fun WelcomePage(
     modifier: Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth().clipToBounds()) {
-        val short = maxHeight < 220.dp
+        val viewportHeight = maxHeight
+        val short = viewportHeight < 220.dp
         val artHeight by
             animateDpAsState(
                 if (short) 0.dp else if (compactInput) 40.dp else 104.dp,
@@ -37,9 +38,14 @@ internal fun WelcomePage(
             Column(
                 Modifier.widthIn(max = 440.dp)
                     .fillMaxWidth()
+                    .heightIn(min = if (compactInput) 0.dp else viewportHeight)
                     .padding(horizontal = 16.dp, vertical = if (short) 4.dp else 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(if (short) 4.dp else 12.dp),
+                verticalArrangement =
+                    Arrangement.spacedBy(
+                        if (short) 4.dp else 12.dp,
+                        if (compactInput) Alignment.Top else Alignment.CenterVertically,
+                    ),
             ) {
                 Box(
                     Modifier.fillMaxWidth().height(artHeight).clipToBounds(),
