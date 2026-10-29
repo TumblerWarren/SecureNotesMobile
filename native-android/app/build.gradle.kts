@@ -56,6 +56,8 @@ android {
             versionNameSuffix = "-preview"
         }
         release {
+            // The native vault uses a new signing key. Keep legacy installs and their data intact.
+            applicationIdSuffix = ".vault"
             if (releaseKeystore != null) signingConfig = signingConfigs.getByName("vaultRelease")
             isMinifyEnabled = true
             isShrinkResources = true
