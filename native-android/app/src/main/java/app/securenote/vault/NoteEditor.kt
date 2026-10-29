@@ -489,7 +489,10 @@ private fun RichTextBlock(
                 hint = "Write a note…"
                 includeFontPadding = false
                 minLines = 1
-                maxLines = 24
+                // Let the enclosing LazyColumn scroll the complete paragraph.
+                // A line cap creates a competing native scrolling area in AndroidView.
+                maxLines = Int.MAX_VALUE
+                setHorizontallyScrolling(false)
                 textSize = 18f
                 typeface = Typeface.create("serif", Typeface.NORMAL)
                 setLineSpacing(5f * resources.displayMetrics.density, 1f)
