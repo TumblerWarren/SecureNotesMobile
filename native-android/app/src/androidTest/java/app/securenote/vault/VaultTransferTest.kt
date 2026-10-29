@@ -141,6 +141,8 @@ class VaultTransferTest {
             }
             failed { bad.restore(traversal.toByteArray().inputStream(), password.toByteArray()) }
             assertFalse(bad.exists)
+            java.io.File(context.noBackupFilesDir, "$sourceName/header").delete()
+            failed { source.backup(ByteArrayOutputStream()) }
             source.revoke()
             failed { VaultTransfers(context, source).copyFile(id, ByteArrayOutputStream()) }
         } finally {
