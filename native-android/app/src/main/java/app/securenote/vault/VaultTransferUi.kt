@@ -152,6 +152,7 @@ internal fun VaultTransferDialogs(model: VaultModel) {
                     label = { Text("Recovery key") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth().keepInputVisible(),
                 )
             OutlinedTextField(
