@@ -270,11 +270,30 @@ class VisualWalkthroughTest {
             }
             step("settings") {
                 home()
+                val footerTop =
+                    rule.onNodeWithTag("nav-all").fetchSemanticsNode().boundsInWindow.top
                 rule.onNodeWithTag("nav-settings").performClick()
                 rule.onNodeWithTag("settings-header").assertIsDisplayed()
+                assertTrue(
+                    "Settings must retain the shared footer position",
+                    kotlin.math.abs(
+                        rule.onNodeWithTag("nav-all").fetchSemanticsNode().boundsInWindow.top -
+                            footerTop
+                    ) < 2f,
+                )
+                rule.onNodeWithTag("nav-settings").assertIsDisplayed().assertIsSelected()
+                rule.onNodeWithTag("nav-all").assertIsDisplayed().assertIsNotSelected()
+                rule.onNodeWithTag("nav-notes").assertIsDisplayed()
+                rule.onNodeWithTag("nav-folders").assertIsDisplayed()
                 save("settings-top")
                 rule.onNodeWithText("On this device", substring = false).performScrollTo()
                 save("settings-bottom")
+                rule.onNodeWithTag("nav-notes").performClick()
+                rule.onNodeWithTag("nav-notes").assertIsSelected()
+                rule.onNodeWithTag("vault-library").assertIsDisplayed()
+                rule.onNodeWithTag("nav-settings").performClick()
+                rule.onNodeWithTag("nav-settings").assertIsSelected()
+                rule.onNodeWithTag("settings-header").assertIsDisplayed()
             }
             step("password-form") {
                 home()
@@ -283,6 +302,7 @@ class VisualWalkthroughTest {
                     .onNodeWithText("Change password", substring = false)
                     .performScrollTo()
                     .performClick()
+                rule.onNodeWithTag("nav-settings").assertIsDisplayed().assertIsSelected()
                 save("password-form")
                 rule.onNodeWithText("Current password", substring = false).performClick()
                 save("password-keyboard")
