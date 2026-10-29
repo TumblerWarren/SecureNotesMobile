@@ -98,11 +98,18 @@ private fun OthersButton(modifier: Modifier = Modifier, open: () -> Unit) {
     }
 }
 
+/** Keep library state mounted while the parent renders the shared tab chrome and selected body. */
 @Composable
 fun PaperLibrary(
     model: VaultModel,
     state: LazyGridState,
     onSelecting: (Boolean) -> Unit = {},
+    layout:
+        @Composable
+        (
+            header: @Composable RowScope.() -> Unit,
+            content: @Composable () -> Unit,
+        ) -> Unit,
     onAdd: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -236,351 +243,353 @@ fun PaperLibrary(
                     ),
             )
         }
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .background(Paper.Header, RoundedCornerShape(14.dp))
-                    .border(BorderStroke(1.dp, Paper.Line), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        layout({
+            if (selecting)
+                PaperAction("Finish selecting", PaperGlyph.Close) {
+                    selecting = false
+                    chosen = emptySet()
+                }
+            else if (browsing && parent != null)
+                PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
+            Column(
+                if (short && !selecting) Modifier.widthIn(max = 120.dp).padding(horizontal = 12.dp)
+                else Modifier.weight(1f).padding(start = 12.dp)
             ) {
-                if (selecting)
-                    PaperAction("Finish selecting", PaperGlyph.Close) {
-                        selecting = false
-                        chosen = emptySet()
-                    }
-                else if (browsing && parent != null)
-                    PaperAction("Parent folder", PaperGlyph.Back) { model.folderUp() }
-                Column(
-                    if (short && !selecting)
-                        Modifier.widthIn(max = 120.dp).padding(horizontal = 12.dp)
-                    else Modifier.weight(1f).padding(start = 12.dp)
-                ) {
+                Text(
+                    if (selecting) "${chosen.size} selected" else title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!short && !selecting)
                     Text(
-                        if (selecting) "${chosen.size} selected" else title,
-                        style = MaterialTheme.typography.titleLarge,
+                        if (pages.loadState.refresh is LoadState.Loading && pages.itemCount == 0)
+                            "Loading…"
+                        else
+                            countLabel(pages.itemCount, "item") +
+                                if (browsing && parent == null) " · Unfiled" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Paper.Muted,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
-                    if (!short && !selecting)
-                        Text(
-                            if (
-                                pages.loadState.refresh is LoadState.Loading && pages.itemCount == 0
-                            )
-                                "Loading…"
-                            else
-                                countLabel(pages.itemCount, "item") +
-                                    if (browsing && parent == null) " · Unfiled" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Paper.Muted,
-                            maxLines = 1,
-                        )
-                }
-                if (short && !selecting) search(Modifier.weight(1f).padding(vertical = 4.dp))
-                if (!selecting) {
-                    PaperAction(
-                        "Add item",
-                        PaperGlyph.Add,
-                        Modifier.testTag("add-item"),
-                        enabled = !busy,
-                        action = onAdd,
+            }
+            if (short && !selecting) search(Modifier.weight(1f).padding(vertical = 4.dp))
+            if (!selecting) {
+                PaperAction(
+                    "Add item",
+                    PaperGlyph.Add,
+                    Modifier.testTag("add-item"),
+                    enabled = !busy,
+                    action = onAdd,
+                )
+                PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
+            }
+            Box {
+                PaperAction("Sort", PaperGlyph.More) { sorting = true }
+                DropdownMenu(sorting, { sorting = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (selecting) "Done" else "Select") },
+                        onClick = {
+                            selecting = !selecting
+                            chosen = emptySet()
+                            sorting = false
+                        },
                     )
-                    PaperAction("Lock", PaperGlyph.Lock) { model.lock() }
-                }
-                Box {
-                    PaperAction("Sort", PaperGlyph.More) { sorting = true }
-                    DropdownMenu(sorting, { sorting = false }) {
+                    if (browsing && !selecting)
                         DropdownMenuItem(
-                            text = { Text(if (selecting) "Done" else "Select") },
+                            text = {
+                                Text(if (parent == null) "Organize unfiled" else "Organize files")
+                            },
+                            leadingIcon = { PaperIcon(PaperGlyph.Move) },
+                            enabled = pages.itemCount > 0,
                             onClick = {
-                                selecting = !selecting
+                                selecting = true
                                 chosen = emptySet()
                                 sorting = false
                             },
                         )
-                        if (browsing && !selecting)
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (parent == null) "Organize unfiled" else "Organize files"
-                                    )
-                                },
-                                leadingIcon = { PaperIcon(PaperGlyph.Move) },
-                                enabled = pages.itemCount > 0,
-                                onClick = {
-                                    selecting = true
-                                    chosen = emptySet()
-                                    sorting = false
-                                },
-                            )
+                    DropdownMenuItem(
+                        text = { Text("New folder") },
+                        onClick = {
+                            creating = true
+                            sorting = false
+                        },
+                        leadingIcon = { PaperIcon(PaperGlyph.FolderAdd) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (grid) "List view" else "Grid view") },
+                        onClick = {
+                            model.toggleGrid()
+                            sorting = false
+                        },
+                        leadingIcon = {
+                            PaperIcon(if (grid) PaperGlyph.List else PaperGlyph.Grid)
+                        },
+                    )
+                    listOf("modified" to "Modified", "name" to "Name", "size" to "Size").forEach {
+                        (key, label) ->
                         DropdownMenuItem(
-                            text = { Text("New folder") },
+                            text = { Text(if (key == order) "✓ $label" else label) },
                             onClick = {
-                                creating = true
+                                model.sort.value = key
                                 sorting = false
                             },
-                            leadingIcon = { PaperIcon(PaperGlyph.FolderAdd) },
                         )
-                        DropdownMenuItem(
-                            text = { Text(if (grid) "List view" else "Grid view") },
-                            onClick = {
-                                model.toggleGrid()
-                                sorting = false
-                            },
-                            leadingIcon = {
-                                PaperIcon(if (grid) PaperGlyph.List else PaperGlyph.Grid)
-                            },
-                        )
-                        listOf("modified" to "Modified", "name" to "Name", "size" to "Size")
-                            .forEach { (key, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(if (key == order) "✓ $label" else label) },
-                                    onClick = {
-                                        model.sort.value = key
-                                        sorting = false
-                                    },
-                                )
-                            }
                     }
                 }
             }
-            if (!selecting && !short) {
-                if (browsing && parent != null)
-                    Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
-                search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
-                BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    val available = with(density) { (maxWidth - othersWidth).toPx() }
-                    val visible = mutableListOf<Pair<String, String>>()
-                    var used = 0f
-                    for (filter in filters.take(4)) {
-                        val width =
-                            measurer.measure(filter.second, chipStyle).size.width +
-                                with(density) { 38.dp.toPx() }
-                        if (visible.isNotEmpty() && used + width > available) break
-                        visible.add(filter)
-                        used += width
-                    }
-                    if (category != "all" && visible.none { it.first == category }) {
-                        val active = filters.firstOrNull { it.first == category }
-                        if (active != null && visible.size > 1) visible[visible.lastIndex] = active
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        visible.forEach { (key, label) ->
-                            FilterChip(
-                                selected = category == key,
-                                onClick = { model.showLibrary(key) },
-                                label = {
-                                    Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                            )
+        }) {
+            Column(Modifier.fillMaxSize()) {
+                if (!selecting && !short) {
+                    if (browsing && parent != null)
+                        Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
+                    search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        val available = with(density) { (maxWidth - othersWidth).toPx() }
+                        val visible = mutableListOf<Pair<String, String>>()
+                        var used = 0f
+                        for (filter in filters.take(4)) {
+                            val width =
+                                measurer.measure(filter.second, chipStyle).size.width +
+                                    with(density) { 38.dp.toPx() }
+                            if (visible.isNotEmpty() && used + width > available) break
+                            visible.add(filter)
+                            used += width
                         }
-                        OthersButton(Modifier.width(othersWidth)) {
-                            inputFocus.clearFocus()
-                            inputKeyboard?.hide()
-                            types = true
+                        if (category != "all" && visible.none { it.first == category }) {
+                            val active = filters.firstOrNull { it.first == category }
+                            if (active != null && visible.size > 1)
+                                visible[visible.lastIndex] = active
                         }
-                    }
-                }
-            }
-            if (browsing && query.isNotBlank())
-                TextButton({
-                    model.folderBrowsing.value = false
-                    model.folderId.value = null
-                    model.showLibrary("all")
-                }) {
-                    Text("Search entire vault")
-                }
-            LazyVerticalGrid(
-                columns = if (grid) GridCells.Adaptive(cellWidth) else GridCells.Fixed(1),
-                state = state,
-                modifier = Modifier.weight(1f).fillMaxWidth().testTag("vault-library"),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(
-                    visibleFolders,
-                    key = { "folder/${it.folder.id}" },
-                    span = { GridItemSpan(maxLineSpan) },
-                ) {
-                    FolderRow(model, it)
-                }
-                if (browsing && pages.itemCount > 0)
-                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                if (parent == null) "Unfiled" else "Files",
-                                Modifier.weight(1f).padding(vertical = 8.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Paper.Muted,
-                            )
-                            if (!selecting) TextButton({ selecting = true }) { Text("Organize") }
-                        }
-                    }
-                items(
-                    count = pages.itemCount,
-                    key = { pages.peek(it)?.id ?: "placeholder/$it" },
-                    span = { index ->
-                        fun wide(at: Int): Boolean {
-                            if (at !in 0 until pages.itemCount) return false
-                            val mime = pages.peek(at)?.mime.orEmpty()
-                            return mime.startsWith("video/") || mime.startsWith("audio/")
-                        }
-                        val finalItem =
-                            index == pages.itemCount - 1 &&
-                                pages.loadState.append.endOfPaginationReached
-                        // Fill a lone card before a full-width media row without changing sort
-                        // order.
-                        val lone =
-                            maxCurrentLineSpan == maxLineSpan && (wide(index + 1) || finalItem)
-                        GridItemSpan(if (!grid || wide(index) || lone) maxLineSpan else 1)
-                    },
-                ) { index ->
-                    val item = pages[index]
-                    if (item != null) {
-                        val checked = item.id in chosen
-                        Box(
-                            Modifier.fillMaxWidth()
-                                .background(Paper.Surface, RoundedCornerShape(12.dp))
-                                .border(
-                                    if (checked) 2.dp else 0.dp,
-                                    if (checked) Paper.Accent
-                                    else androidx.compose.ui.graphics.Color.Transparent,
-                                    RoundedCornerShape(12.dp),
+                            visible.forEach { (key, label) ->
+                                FilterChip(
+                                    selected = category == key,
+                                    onClick = { model.showLibrary(key) },
+                                    label = {
+                                        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    shape = RoundedCornerShape(14.dp),
                                 )
-                        ) {
-                            VaultEntry(
-                                model,
-                                item,
-                                grid,
-                                selecting,
-                                { chosen = if (checked) chosen - item.id else chosen + item.id },
-                                { deleting = item },
-                                {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    selecting = true
-                                    chosen = chosen + item.id
-                                },
-                                {
-                                    chosen = setOf(item.id)
-                                    selecting = true
-                                    moving = true
-                                },
-                            )
-                            if (selecting)
-                                Checkbox(
-                                    checked,
-                                    { chosen = if (it) chosen + item.id else chosen - item.id },
-                                    modifier =
-                                        Modifier.align(Alignment.TopEnd)
-                                            .background(Paper.Surface, RoundedCornerShape(12.dp))
-                                            .testTag("select-${item.id}"),
-                                )
-                        }
-                    }
-                }
-                if (pages.loadState.refresh is LoadState.Loading)
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                    }
-                if (
-                    pages.loadState.refresh is LoadState.Error ||
-                        pages.loadState.append is LoadState.Error
-                )
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        TextButton({ pages.retry() }) { Text("Try again") }
-                    }
-                if (
-                    pages.itemCount == 0 &&
-                        visibleFolders.isEmpty() &&
-                        pages.loadState.refresh is LoadState.NotLoading
-                )
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            PaperFileBadge("application/octet-stream")
-                            Text(
-                                if (query.isBlank()) "Your vault, ready for you"
-                                else "Nothing found",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                if (query.isBlank()) "Add a note, file or folder."
-                                else "Try another name or phrase.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Paper.Muted,
-                            )
-                            if (query.isBlank()) TextButton(onAdd) { Text("Add something") }
-                        }
-                    }
-                if (browsing)
-                    items(jobs, key = { "job/${it.id}" }, span = { GridItemSpan(maxLineSpan) }) {
-                        job ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Import · ${job.completed} done · ${job.failed} failed",
-                                Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            TextButton({ model.resumeImport(job) }, enabled = !busy) {
-                                Text("Resume")
+                            }
+                            OthersButton(Modifier.width(othersWidth)) {
+                                inputFocus.clearFocus()
+                                inputKeyboard?.hide()
+                                types = true
                             }
                         }
                     }
-            }
-            if (selecting) {
-                HorizontalDivider(color = Paper.Line)
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    @Composable
-                    fun action(
-                        label: String,
-                        icon: PaperGlyph,
-                        enabled: Boolean = true,
-                        click: () -> Unit,
+                }
+                if (browsing && query.isNotBlank())
+                    TextButton({
+                        model.folderBrowsing.value = false
+                        model.folderId.value = null
+                        model.showLibrary("all")
+                    }) {
+                        Text("Search entire vault")
+                    }
+                LazyVerticalGrid(
+                    columns = if (grid) GridCells.Adaptive(cellWidth) else GridCells.Fixed(1),
+                    state = state,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("vault-library"),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(
+                        visibleFolders,
+                        key = { "folder/${it.folder.id}" },
+                        span = { GridItemSpan(maxLineSpan) },
                     ) {
-                        Column(
-                            Modifier.weight(1f)
-                                .heightIn(min = 64.dp)
-                                .clickable(enabled = enabled, onClick = click)
-                                .padding(vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            PaperIcon(
-                                icon,
-                                color =
-                                    if (enabled) Paper.Accent else Paper.Muted.copy(alpha = .4f),
-                            )
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (enabled) Paper.Ink else Paper.Muted.copy(alpha = .4f),
-                                maxLines = 1,
-                            )
+                        FolderRow(model, it)
+                    }
+                    if (browsing && pages.itemCount > 0)
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    if (parent == null) "Unfiled" else "Files",
+                                    Modifier.weight(1f).padding(vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Paper.Muted,
+                                )
+                                if (!selecting)
+                                    TextButton({ selecting = true }) { Text("Organize") }
+                            }
+                        }
+                    items(
+                        count = pages.itemCount,
+                        key = { pages.peek(it)?.id ?: "placeholder/$it" },
+                        span = { index ->
+                            fun wide(at: Int): Boolean {
+                                if (at !in 0 until pages.itemCount) return false
+                                val mime = pages.peek(at)?.mime.orEmpty()
+                                return mime.startsWith("video/") || mime.startsWith("audio/")
+                            }
+                            val finalItem =
+                                index == pages.itemCount - 1 &&
+                                    pages.loadState.append.endOfPaginationReached
+                            // Fill a lone card before a full-width media row without changing sort
+                            // order.
+                            val lone =
+                                maxCurrentLineSpan == maxLineSpan && (wide(index + 1) || finalItem)
+                            GridItemSpan(if (!grid || wide(index) || lone) maxLineSpan else 1)
+                        },
+                    ) { index ->
+                        val item = pages[index]
+                        if (item != null) {
+                            val checked = item.id in chosen
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Paper.Surface, RoundedCornerShape(12.dp))
+                                    .border(
+                                        if (checked) 2.dp else 0.dp,
+                                        if (checked) Paper.Accent
+                                        else androidx.compose.ui.graphics.Color.Transparent,
+                                        RoundedCornerShape(12.dp),
+                                    )
+                            ) {
+                                VaultEntry(
+                                    model,
+                                    item,
+                                    grid,
+                                    selecting,
+                                    {
+                                        chosen = if (checked) chosen - item.id else chosen + item.id
+                                    },
+                                    { deleting = item },
+                                    {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        selecting = true
+                                        chosen = chosen + item.id
+                                    },
+                                    {
+                                        chosen = setOf(item.id)
+                                        selecting = true
+                                        moving = true
+                                    },
+                                )
+                                if (selecting)
+                                    Checkbox(
+                                        checked,
+                                        { chosen = if (it) chosen + item.id else chosen - item.id },
+                                        modifier =
+                                            Modifier.align(Alignment.TopEnd)
+                                                .padding(4.dp)
+                                                .size(48.dp)
+                                                .testTag("select-${item.id}"),
+                                    )
+                            }
                         }
                     }
-                    action("Move", PaperGlyph.Move, chosen.isNotEmpty()) { moving = true }
-                    action("Rename", PaperGlyph.Draw, chosen.size == 1) {
-                        newName =
-                            pages.itemSnapshotList.items
-                                .firstOrNull { it.id in chosen }
-                                ?.name
-                                .orEmpty()
-                        renaming = true
+                    if (pages.loadState.refresh is LoadState.Loading)
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                        }
+                    if (
+                        pages.loadState.refresh is LoadState.Error ||
+                            pages.loadState.append is LoadState.Error
+                    )
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            TextButton({ pages.retry() }) { Text("Try again") }
+                        }
+                    if (
+                        pages.itemCount == 0 &&
+                            visibleFolders.isEmpty() &&
+                            pages.loadState.refresh is LoadState.NotLoading
+                    )
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                PaperFileBadge("application/octet-stream")
+                                Text(
+                                    if (query.isBlank()) "Your vault, ready for you"
+                                    else "Nothing found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    if (query.isBlank()) "Add a note, file or folder."
+                                    else "Try another name or phrase.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Paper.Muted,
+                                )
+                                if (query.isBlank()) TextButton(onAdd) { Text("Add something") }
+                            }
+                        }
+                    if (browsing)
+                        items(
+                            jobs,
+                            key = { "job/${it.id}" },
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) { job ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Import · ${job.completed} done · ${job.failed} failed",
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                TextButton({ model.resumeImport(job) }, enabled = !busy) {
+                                    Text("Resume")
+                                }
+                            }
+                        }
+                }
+                if (selecting) {
+                    HorizontalDivider(color = Paper.Line)
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                        @Composable
+                        fun action(
+                            label: String,
+                            icon: PaperGlyph,
+                            enabled: Boolean = true,
+                            click: () -> Unit,
+                        ) {
+                            Column(
+                                Modifier.weight(1f)
+                                    .heightIn(min = 64.dp)
+                                    .clickable(enabled = enabled, onClick = click)
+                                    .padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                PaperIcon(
+                                    icon,
+                                    color =
+                                        if (enabled) Paper.Accent
+                                        else Paper.Muted.copy(alpha = .4f),
+                                )
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color =
+                                        if (enabled) Paper.Ink else Paper.Muted.copy(alpha = .4f),
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        action("Move", PaperGlyph.Move, chosen.isNotEmpty()) { moving = true }
+                        action("Rename", PaperGlyph.Draw, chosen.size == 1) {
+                            newName =
+                                pages.itemSnapshotList.items
+                                    .firstOrNull { it.id in chosen }
+                                    ?.name
+                                    .orEmpty()
+                            renaming = true
+                        }
+                        action("Delete", PaperGlyph.Trash, chosen.isNotEmpty()) {
+                            bulkDelete = true
+                        }
+                        action("More", PaperGlyph.More) { more = true }
                     }
-                    action("Delete", PaperGlyph.Trash, chosen.isNotEmpty()) { bulkDelete = true }
-                    action("More", PaperGlyph.More) { more = true }
                 }
             }
         }
@@ -788,7 +797,7 @@ private fun VaultEntry(
             Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
                 Text(
                     item.name,
-                    Modifier.padding(end = if (selecting) 44.dp else 8.dp),
+                    Modifier.padding(end = if (selecting) 56.dp else 8.dp),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -842,6 +851,7 @@ private fun VaultEntry(
                         )
                 }
             }
+            if (selecting) Spacer(Modifier.width(56.dp))
             if (!selecting && item.pinned)
                 PaperIcon(PaperGlyph.Pin, "Pinned", Modifier.size(14.dp), Paper.Accent)
             if (!selecting) options()
