@@ -3,7 +3,13 @@
 package app.securenote.vault
 
 import android.view.SurfaceView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material3.*
@@ -15,6 +21,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +59,9 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
     var deadline by remember { mutableLongStateOf(0) }
     var full by remember { mutableStateOf(false) }
     var captions by remember { mutableStateOf(false) }
+    var controlsVisible by remember(id) { mutableStateOf(true) }
+    var controlsInteraction by remember(id) { mutableIntStateOf(0) }
+    val orientation = LocalConfiguration.current.orientation
     var hasCaptions by remember { mutableStateOf(false) }
     var title by remember(id) { mutableStateOf(item.name.substringBeforeLast('.')) }
     var artist by remember { mutableStateOf("On this device") }
@@ -174,7 +186,27 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
             }
         }
     }
+    LaunchedEffect(
+        playing,
+        controlsVisible,
+        controlsInteraction,
+        seeking,
+        settings,
+        full,
+        orientation,
+        error,
+    ) {
+        if (
+            !audio && playing && controlsVisible && seeking == null && !settings && error.isEmpty()
+        ) {
+            delay(3000)
+            controlsVisible = false
+        }
+    }
+    val showControls = audio || controlsVisible || !playing || error.isNotEmpty()
     fun playPause() {
+        controlsVisible = true
+        controlsInteraction++
         if (player.isPlaying) player.pause()
         else {
             if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
@@ -199,7 +231,20 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
             color = Paper.Surface,
             border = BorderStroke(1.dp, Paper.Line),
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .testTag("media-controls")
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            controlsInteraction++
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
                 if (error.isNotEmpty())
                     Text(
                         error,
@@ -344,11 +389,51 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                 modifier = Modifier.fillMaxSize(),
                 onRelease = { it.player = null },
             )
+            Box(
+                Modifier.matchParentSize().testTag("video-picture").clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClickLabel =
+                        if (showControls) "Hide video controls" else "Show video controls",
+                ) {
+                    controlsVisible = !showControls
+                    controlsInteraction++
+                }
+            )
             if (buffering) CircularProgressIndicator(Modifier.size(32.dp), color = Paper.Accent)
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().testTag("native-media-player")) {
         val short = maxHeight < 360.dp
+        @Composable
+        fun video(modifier: Modifier, close: Boolean) {
+            BoxWithConstraints(modifier.background(Paper.Media)) {
+                picture(Modifier.fillMaxSize())
+                AnimatedVisibility(
+                    visible = showControls,
+                    modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = 460.dp),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    Column(
+                        Modifier.heightIn(max = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(8.dp)
+                    ) {
+                        transport(compact = true)
+                    }
+                }
+                if (close && showControls)
+                    PaperAction(
+                        "Close full screen",
+                        PaperGlyph.Back,
+                        Modifier.align(Alignment.TopStart),
+                        dark = true,
+                    ) {
+                        full = false
+                    }
+            }
+        }
         if (!audio && full) {
             Dialog(
                 onDismissRequest = { full = false },
@@ -358,36 +443,11 @@ internal fun SecureMediaViewer(model: VaultModel, id: String, item: VaultItem) {
                         securePolicy = SecureFlagPolicy.SecureOn,
                     ),
             ) {
-                Box(Modifier.fillMaxSize().background(Paper.Media).safeDrawingPadding()) {
-                    picture(Modifier.fillMaxSize())
-                    PaperAction(
-                        "Close full screen",
-                        PaperGlyph.Back,
-                        Modifier.align(Alignment.TopStart),
-                        dark = true,
-                    ) {
-                        full = false
-                    }
-                    Box(
-                        Modifier.align(Alignment.BottomCenter).widthIn(max = 440.dp).padding(8.dp)
-                    ) {
-                        transport(true)
-                    }
-                }
+                video(Modifier.fillMaxSize().safeDrawingPadding(), true)
             }
-        } else if (!audio && short)
-            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                picture(Modifier.weight(1f).fillMaxHeight())
-                Column(
-                    Modifier.widthIn(max = 280.dp)
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(8.dp)
-                ) {
-                    transport(true)
-                }
-            }
-        else if (audio && short)
+        } else if (!audio) {
+            video(Modifier.fillMaxSize(), false)
+        } else if (audio && short)
             Row(
                 Modifier.fillMaxSize().padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,

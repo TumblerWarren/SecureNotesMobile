@@ -16,6 +16,7 @@ internal data class EpubFrame(
     val sections: Int,
     val previous: Boolean,
     val next: Boolean,
+    val contentIndex: Int = -1,
 ) : AutoCloseable {
     @Synchronized
     override fun close() {
@@ -26,7 +27,22 @@ internal data class EpubFrame(
     }
 }
 
-internal data class EpubCatalog(val title: String, val author: String, val chapters: List<String>)
+internal data class EpubContent(
+    val title: String,
+    val chapter: Int,
+    val anchor: String,
+    val depth: Int,
+) {
+    val link: String
+        get() = "vault-epub:$chapter#" + java.net.URLEncoder.encode(anchor, "UTF-8")
+}
+
+internal data class EpubCatalog(
+    val title: String,
+    val author: String,
+    val chapters: List<String>,
+    val contents: List<EpubContent>,
+)
 
 internal data class EpubPosition(
     val chapter: Int = 0,
@@ -110,11 +126,32 @@ internal class EpubClient(private val context: Context) : AutoCloseable {
                         images.forEach { require(it.width in 1..1600 && it.height in 1..1600) }
                         data.getStringArrayList("chapters")?.let { chapters ->
                             require(chapters.size in 1..1024 && chapters.all { it.length <= 160 })
+                            val titles = checkNotNull(data.getStringArrayList("tocTitles"))
+                            val targets = checkNotNull(data.getIntArray("tocChapters"))
+                            val anchors = checkNotNull(data.getStringArrayList("tocAnchors"))
+                            val depths = checkNotNull(data.getIntArray("tocDepths"))
+                            require(
+                                titles.size in 1..2048 &&
+                                    targets.size == titles.size &&
+                                    anchors.size == titles.size &&
+                                    depths.size == titles.size
+                            )
+                            val contents =
+                                titles.indices.map { i ->
+                                    require(
+                                        titles[i].length <= 160 &&
+                                            targets[i] in chapters.indices &&
+                                            anchors[i].length <= 512 &&
+                                            depths[i] in 0..8
+                                    )
+                                    EpubContent(titles[i], targets[i], anchors[i], depths[i])
+                                }
                             catalog =
                                 EpubCatalog(
                                     data.getString("title").orEmpty().take(255),
                                     data.getString("author").orEmpty().take(255),
                                     chapters,
+                                    contents,
                                 )
                         }
                         val count = data.getInt("sections")
@@ -123,6 +160,11 @@ internal class EpubClient(private val context: Context) : AutoCloseable {
                         require(chapter in checkNotNull(catalog).chapters.indices)
                         val section = data.getInt("section")
                         require(section in 0 until count)
+                        val contentIndex = data.getInt("contentIndex", -1)
+                        require(
+                            contentIndex == -1 ||
+                                contentIndex in checkNotNull(catalog).contents.indices
+                        )
                         val frame =
                             EpubFrame(
                                 html,
@@ -132,6 +174,7 @@ internal class EpubClient(private val context: Context) : AutoCloseable {
                                 count,
                                 data.getBoolean("previous"),
                                 data.getBoolean("next"),
+                                contentIndex,
                             )
                         if (pending?.complete(frame) != true) frame.close()
                     } catch (e: Exception) {

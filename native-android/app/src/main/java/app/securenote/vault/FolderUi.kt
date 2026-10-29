@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -65,6 +66,7 @@ internal fun FolderPicker(model: VaultModel, dismiss: () -> Unit, choose: (Strin
     PaperSheet(
         "Move to folder",
         dismiss,
+        scrollContent = false,
         footer = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(dismiss, Modifier.weight(1f)) { Text("Cancel", maxLines = 1) }
@@ -81,7 +83,8 @@ internal fun FolderPicker(model: VaultModel, dismiss: () -> Unit, choose: (Strin
         },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PaperIcon(PaperGlyph.Home)
+            if (parent == null) PaperIcon(PaperGlyph.Home)
+            else PaperAction("Parent folder", PaperGlyph.Back) { parent = up }
             Text(
                 label,
                 Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -91,19 +94,18 @@ internal fun FolderPicker(model: VaultModel, dismiss: () -> Unit, choose: (Strin
             )
             PaperAction("New folder", PaperGlyph.FolderAdd) { creating = true }
         }
-        if (parent != null)
-            TextButton({ parent = up }) {
-                PaperIcon(PaperGlyph.Back)
-                Text("Parent folder", Modifier.padding(start = 8.dp))
-            }
         LazyColumn(
             Modifier.fillMaxWidth()
-                .heightIn(max = 280.dp)
-                .height((children.size.coerceAtMost(4) * 64).coerceAtLeast(48).dp)
+                .weight(1f, fill = false)
+                .heightIn(max = (children.size.coerceAtMost(5) * 64).coerceAtLeast(48).dp)
+                .testTag("folder-destinations")
         ) {
             items(children, key = { it.id }) { f ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { parent = f.id }.heightIn(min = 64.dp),
+                    Modifier.fillMaxWidth()
+                        .testTag("folder-destination-${f.id}")
+                        .clickable { parent = f.id }
+                        .heightIn(min = 64.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     FolderBadge(f)

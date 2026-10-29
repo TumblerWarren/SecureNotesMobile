@@ -53,6 +53,7 @@ internal fun PaperSheet(
     title: String,
     dismiss: () -> Unit,
     footer: @Composable (() -> Unit)? = null,
+    scrollContent: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(
@@ -70,7 +71,9 @@ internal fun PaperSheet(
             contentAlignment = Alignment.BottomCenter,
         ) {
             Surface(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxHeight * .92f),
+                Modifier.widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = if (scrollContent) maxHeight * .92f else maxHeight),
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = Paper.Background,
             ) {
@@ -96,7 +99,10 @@ internal fun PaperSheet(
                     }
                     Column(
                         Modifier.weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState())
+                            .then(
+                                if (scrollContent) Modifier.verticalScroll(rememberScrollState())
+                                else Modifier
+                            )
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         content = content,
                     )

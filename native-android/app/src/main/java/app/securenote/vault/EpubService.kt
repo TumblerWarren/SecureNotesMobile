@@ -96,6 +96,7 @@ class EpubService : Service() {
                                         putInt("chapter", page.chapter)
                                         putInt("section", page.section)
                                         putInt("sections", page.sections)
+                                        putInt("contentIndex", page.contentIndex)
                                         putBoolean("previous", page.previous)
                                         putBoolean("next", page.next)
                                         putStringArrayList("imageKeys", ArrayList(page.images.keys))
@@ -109,6 +110,22 @@ class EpubService : Service() {
                                             putStringArrayList(
                                                 "chapters",
                                                 ArrayList(book.chapters.map { it.title }),
+                                            )
+                                            putStringArrayList(
+                                                "tocTitles",
+                                                ArrayList(book.contents.map { it.title }),
+                                            )
+                                            putIntArray(
+                                                "tocChapters",
+                                                book.contents.map { it.chapter }.toIntArray(),
+                                            )
+                                            putStringArrayList(
+                                                "tocAnchors",
+                                                ArrayList(book.contents.map { it.anchor }),
+                                            )
+                                            putIntArray(
+                                                "tocDepths",
+                                                book.contents.map { it.depth }.toIntArray(),
                                             )
                                         }
                                     }

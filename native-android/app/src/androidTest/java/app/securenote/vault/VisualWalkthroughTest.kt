@@ -106,6 +106,17 @@ class VisualWalkthroughTest {
                 home()
                 save("library-top")
             }
+            step("file-type-overlay") {
+                home()
+                tool("File types").performClick()
+                save("file-types-overlay")
+                rule.onNodeWithTag("file-type-epub").performScrollTo().performClick()
+                rule.runOnIdle { assertTrue(model.category.value == "epub") }
+                save("file-type-active")
+                tool("File types").performClick()
+                rule.onNodeWithTag("file-type-all").performScrollTo().performClick()
+                rule.runOnIdle { assertTrue(model.category.value == "all") }
+            }
             step("library-scrolled") {
                 rule.onNodeWithTag("vault-library").performTouchInput { swipeUp() }
                 save("library-scrolled")
@@ -114,6 +125,15 @@ class VisualWalkthroughTest {
                 home()
                 rule.runOnIdle { model.useGrid.value = true }
                 save("library-grid")
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("entry-${ids.getValue("note")}"))
+                rule.onNodeWithTag("entry-${ids.getValue("note")}").performTouchInput {
+                    longClick()
+                }
+                waitText("1 selected")
+                rule.onNodeWithTag("select-${ids.getValue("note")}").assertIsOn()
+                save("long-press-selection")
             }
             step("sort-menu") {
                 home()
@@ -123,7 +143,9 @@ class VisualWalkthroughTest {
             step("selection") {
                 home()
                 tool("Select", "Select items").performClick()
-                rule.onNodeWithTag("vault-library").performScrollToIndex(2)
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))
                 rule
                     .onNodeWithTag("select-${ids.getValue("audio")}")
                     .performScrollTo()
@@ -136,10 +158,79 @@ class VisualWalkthroughTest {
                 waitText("Move to folder")
                 save("move-picker")
             }
+            step("unfiled-move") {
+                home()
+                rule.onNodeWithTag("nav-folders").performClick()
+                if (landscape) {
+                    tool("Sort").performClick()
+                    rule.waitUntil(15000) {
+                        rule
+                            .onAllNodes(
+                                hasText("Organize unfiled", substring = false) and isEnabled()
+                            )
+                            .fetchSemanticsNodes()
+                            .isNotEmpty()
+                    }
+                    rule
+                        .onNodeWithText("Organize unfiled", substring = false)
+                        .performScrollTo()
+                        .performClick()
+                } else {
+                    waitText("16 items", true)
+                    rule
+                        .onNodeWithTag("vault-library")
+                        .performScrollToNode(hasText("Organize", substring = false))
+                    rule.onNodeWithText("Organize", substring = false).performClick()
+                }
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))
+                rule.onNodeWithTag("select-${ids.getValue("audio")}").performClick()
+                rule.onNodeWithText("Move", substring = false).performClick()
+                rule
+                    .onNodeWithTag("folder-destinations")
+                    .performScrollToNode(hasTestTag("folder-destination-work"))
+                rule.onNodeWithTag("folder-destination-work").performClick()
+                waitText("Folders / Work")
+                rule.onNodeWithText("Move here", substring = false).performClick()
+                rule.waitUntil(15000) {
+                    runBlocking { ids.getValue("audio") in store.dao.members("work") }
+                }
+                save("unfiled-organized")
+            }
+            step("bulk-delete-long-press") {
+                home()
+                val disposable = runBlocking {
+                    listOf(store.newNote(), store.newNote()).also { notes ->
+                        notes.forEachIndexed { index, note ->
+                            store.dao.rename(note, "Disposable selection $index")
+                        }
+                    }
+                }
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("entry-${disposable[0]}"))
+                rule.onNodeWithTag("entry-${disposable[0]}").performTouchInput { longClick() }
+                waitText("1 selected")
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${disposable[1]}"))
+                rule.onNodeWithTag("select-${disposable[1]}").performClick()
+                waitText("2 selected")
+                rule.onNodeWithText("Delete", substring = false).performClick()
+                waitText("Delete permanently?")
+                save("bulk-delete-confirmation")
+                rule.onNodeWithTag("confirm-delete").performClick()
+                rule.waitUntil(15000) {
+                    runBlocking { disposable.all { store.dao.find(it) == null } }
+                }
+            }
             step("group-by-type") {
                 home()
                 tool("Select", "Select items").performClick()
-                rule.onNodeWithTag("vault-library").performScrollToIndex(2)
+                rule
+                    .onNodeWithTag("vault-library")
+                    .performScrollToNode(hasTestTag("select-${ids.getValue("audio")}"))
                 rule
                     .onNodeWithTag("select-${ids.getValue("audio")}")
                     .performScrollTo()
@@ -376,6 +467,21 @@ class VisualWalkthroughTest {
                 open(ids.getValue("epub"))
                 waitTag("epub-content")
                 save("epub-reading")
+                rule.onNodeWithTag("epub-content").performTouchInput {
+                    swipeLeft(durationMillis = 1000)
+                }
+                rule.waitUntil(5000) {
+                    var offset = 0
+                    instrumentation.runOnMainSync {
+                        offset =
+                            rule.activity.window.decorView
+                                .findViewWithTag<EpubScrollView>("epub-scroll")
+                                ?.scrollY ?: 0
+                    }
+                    offset > 0
+                }
+                rule.onNodeWithText("Chapter 1 / 2", substring = false).assertExists()
+                save("epub-swiped")
                 rule.onNodeWithContentDescription("Contents", substring = false).performClick()
                 save("epub-contents")
             }
@@ -428,6 +534,12 @@ class VisualWalkthroughTest {
                 rule.waitUntil(15000) { model.playing }
                 rule.onNodeWithTag("media-error").assertDoesNotExist()
                 save("video-playing")
+                rule.waitUntil(7000) {
+                    rule.onAllNodesWithTag("media-controls").fetchSemanticsNodes().isEmpty()
+                }
+                save("video-controls-hidden")
+                rule.onNodeWithTag("video-picture").performClick()
+                rule.onNodeWithTag("media-controls").assertExists()
                 rule
                     .onNodeWithContentDescription("Playback settings", substring = false)
                     .performScrollTo()
@@ -441,6 +553,10 @@ class VisualWalkthroughTest {
                     .performClick()
                 waitDescription("Close full screen")
                 save("video-fullscreen")
+                rule.waitUntil(7000) {
+                    rule.onAllNodesWithTag("media-controls").fetchSemanticsNodes().isEmpty()
+                }
+                rule.onNodeWithTag("video-picture").performClick()
                 rule
                     .onNodeWithContentDescription("Close full screen", substring = false)
                     .performClick()
@@ -483,6 +599,9 @@ class VisualWalkthroughTest {
                     .performScrollTo()
                     .performClick()
                     .assertIsFocused()
+                rule.onNodeWithText("Welcome back.", substring = false).assertExists()
+                if (!landscape && font == 1f)
+                    rule.onNodeWithText("Welcome back.", substring = false).assertIsDisplayed()
                 save("vault-password-keyboard")
                 hideKeyboard()
                 rule

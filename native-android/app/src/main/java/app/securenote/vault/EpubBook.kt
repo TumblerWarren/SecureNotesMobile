@@ -20,6 +20,8 @@ import org.jsoup.select.NodeVisitor
 /** Publication parsing runs only in EpubService's isolated process, without vault keys. */
 internal class EpubBook(private val archive: EpubArchive, private val active: () -> Unit) :
     Closeable {
+    data class Content(val title: String, val chapter: Int, val anchor: String, val depth: Int)
+
     data class Chapter(val path: String, var title: String, val linear: Boolean)
 
     data class Page(
@@ -30,6 +32,7 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
         val sections: Int,
         val previous: Boolean,
         val next: Boolean,
+        val contentIndex: Int,
     ) : Closeable {
         override fun close() {
             images.values.forEach { it.recycle() }
@@ -43,6 +46,7 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
     val title: String
     val author: String
     val chapters: List<Chapter>
+    val contents: List<Content>
     private var cachedIndex = -1
     private var cached: Parsed? = null
     var chapter = 0
@@ -154,35 +158,66 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
         }
         val nav = manifest.values.firstOrNull { "nav" in it.properties.split(Regex("\\s+")) }
         val ncx = elements.firstOrNull { it.local() == "spine" }?.attr("toc")?.let(manifest::get)
+        val tocEntries = mutableListOf<Content>()
+        fun addContent(base: String, href: String, label: String, depth: Int) {
+            val target = EpubArchive.resolve(base, href) ?: return
+            val index = chapters.indexOfFirst { it.path == target.first }
+            if (index < 0 || label.isBlank()) return
+            require(tocEntries.size < 2048) { "Too many EPUB contents entries" }
+            tocEntries.add(
+                Content(label.trim().take(160), index, target.second, depth.coerceIn(0, 8))
+            )
+            setLabel(base, href, label)
+        }
         if (nav != null) {
             val doc = xml(nav.path, 2 * 1024 * 1024)
             val toc =
-                doc.getAllElements().firstOrNull {
-                    it.local() == "nav" &&
-                        ("toc" in it.attr("epub:type").split(' ') || it.attr("role") == "doc-toc")
+                doc.getAllElements().firstOrNull { element ->
+                    element.local() == "nav" &&
+                        (element.attributes().any { attribute ->
+                            attribute.key.substringAfter(':') == "type" &&
+                                "toc" in attribute.value.split(Regex("\\s+"))
+                        } || "doc-toc" in element.attr("role").split(Regex("\\s+")))
                 }
             toc?.getAllElements()
                 ?.filter { it.local() == "a" }
-                ?.forEach { setLabel(nav.path, it.attr("href"), it.text()) }
-        } else if (ncx != null) {
+                ?.forEach {
+                    addContent(
+                        nav.path,
+                        it.attr("href"),
+                        it.text(),
+                        (it.parents().count { parent -> parent.local() == "li" } - 1).coerceAtLeast(
+                            0
+                        ),
+                    )
+                }
+        }
+        // EPUB 2 NCX is also the fallback when a publication's EPUB 3 nav has no usable TOC.
+        if (tocEntries.isEmpty() && ncx != null) {
             xml(ncx.path, 2 * 1024 * 1024)
                 .getAllElements()
                 .filter { it.local() == "navpoint" }
                 .forEach { point ->
                     val src =
                         point
-                            .getAllElements()
+                            .children()
                             .firstOrNull { it.local() == "content" }
                             ?.attr("src")
                             .orEmpty()
                     val label =
-                        point
-                            .getAllElements()
-                            .firstOrNull { it.local() == "navlabel" }
-                            ?.text()
-                            .orEmpty()
-                    setLabel(ncx.path, src, label)
+                        point.children().firstOrNull { it.local() == "navlabel" }?.text().orEmpty()
+                    addContent(
+                        ncx.path,
+                        src,
+                        label,
+                        point.parents().count { it.local() == "navpoint" },
+                    )
                 }
+        }
+        contents = tocEntries.ifEmpty {
+            chapters.mapIndexedNotNull { index, entry ->
+                if (entry.linear) Content(entry.title, index, "", 0) else null
+            }
         }
     }
 
@@ -349,8 +384,15 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
                 images = 0
             }
         }
+        val tocAnchors =
+            contents
+                .filter { it.chapter == index && it.anchor.isNotEmpty() }
+                .map { it.anchor }
+                .toSet()
         fun append(fragment: String, plain: Int, imageCount: Int, ids: List<String>) {
             active()
+            // A TOC target starts a section, so a subchapter opens at its actual heading.
+            if (html.isNotEmpty() && (pending + ids).any { it in tocAnchors }) flush()
             if (
                 html.isNotEmpty() &&
                     (weight + plain > 12000 ||
@@ -490,6 +532,12 @@ internal class EpubBook(private val archive: EpubArchive, private val active: ()
                 section > 0 || chapters.indices.any { it < chapter && chapters[it].linear },
                 section < parsed.pages.lastIndex ||
                     chapters.indices.any { it > chapter && chapters[it].linear },
+                contents.indices
+                    .filter { contents[it].chapter == chapter }
+                    .filter { (parsed.anchors[contents[it].anchor] ?: 0) <= section }
+                    .maxWithOrNull(
+                        compareBy<Int> { parsed.anchors[contents[it].anchor] ?: 0 }.thenBy { it }
+                    ) ?: -1,
             )
         } catch (e: Exception) {
             bitmaps.values.forEach { it.recycle() }

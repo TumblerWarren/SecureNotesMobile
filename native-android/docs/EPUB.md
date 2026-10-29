@@ -1,12 +1,12 @@
 # Internal EPUB reader
 
-EPUB reading is implemented in source alongside the Paper UI. It has not been compiled or run: builds, device tests and CI remain paused at the user's request.
+EPUB reading uses the native Paper reader. Current regression coverage includes encrypted reads, images/internal links, session revocation, EPUB 3 nested navigation and EPUB 2 NCX contents. See the pull request and CI run for the current execution result.
 
 ## Reading experience
 
 Import an `.epub` through Add → Import files and open its card in the vault. EPUB MIME types and `.epub` filenames route to the internal reader, including existing files whose provider supplied a generic MIME type. The card uses a book icon and an EPUB label.
 
-The native serif reader supports DRM-free, reflowable EPUB 2/3 publications, chapter contents from EPUB 3 navigation or EPUB 2 NCX, previous/next section navigation, basic text formatting, inline raster images and links to spine chapters. Internal anchors select the section containing the anchor. Chapters are divided into bounded scrolling sections to keep rendering and memory use predictable. Reader font size ranges from 16 to 28 sp. Chapter, section, scroll offset and font size are saved in the encrypted index and restored when reopening the book. A sudden process kill can lose a pending save; the existing save queue drains on normal lock when possible.
+The native serif reader supports DRM-free, reflowable EPUB 2/3 publications, chapter contents from EPUB 3 navigation or EPUB 2 NCX, previous/next section navigation, basic text formatting, inline raster images and links to spine chapters. Contents entries retain publication order, nesting and fragment targets, including multiple subchapters in one spine file. TOC anchors begin bounded sections so opening a subchapter starts at its heading. Horizontal swipes advance one viewport of text, then continue to the next section in spine order; vertical scrolling remains available. Chapters are divided into bounded scrolling sections to keep rendering and memory use predictable. Reader font size ranges from 16 to 28 sp. Chapter, section, scroll offset and font size are saved in the encrypted index and restored when reopening the book. A sudden process kill can lose a pending save; the existing save queue drains on normal lock when possible.
 
 ## Encryption and process boundary
 
@@ -25,7 +25,7 @@ This is a restricted reading subset, not a claim of full EPUB reading-system con
 
 - DRM-protected content, fixed-layout/pre-paginated books, ZIP64 and split ZIP archives are unsupported. Recognized IDPF/Adobe font obfuscation is tolerated only for font resources; those fonts are not loaded.
 - Publisher CSS, embedded fonts, JavaScript, forms, embedded audio/video and remote resources are not loaded. Tables become plain rows; SVG/MathML content becomes text or an illustration placeholder. Unsupported raster images use alternative text where available. Publisher layout, advanced typography and ordered-list formatting may differ.
-- Only links within the publication's spine can navigate. External links are inert. The contents dialog lists spine chapters, using the first available navigation label for each chapter.
+- Only links within the publication's spine can navigate. External links are inert. The contents dialog follows EPUB 3 TOC links, with EPUB 2 NCX fallback and spine-order fallback only when no usable TOC exists.
 - ZIP resource names, local headers, sizes and CRCs are checked. Duplicate names, unsafe paths, encrypted ZIP entries, traversal outside the ZIP root, malformed data and excessive compression ratios fail closed. There is no filesystem extraction destination.
 - Limits: 20,000 ZIP entries, 16 MiB central directory, 10,000 manifest resources, 1,024 spine chapters, 2 MiB per chapter/package/navigation document, 50,000 elements/100,000 nodes and 128 nesting levels. The container and encryption descriptors are limited to 256 KiB.
 - Each chapter has at most 2,048 sections. Target sections contain about 12,000 text characters, at most 48,000 HTML characters and four images; a large block may be simplified and split.

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -11,8 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -87,6 +92,11 @@ fun PaperLibrary(
     onSelecting: (Boolean) -> Unit = {},
     onAdd: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val chipStyle = MaterialTheme.typography.labelLarge
+    val cellWidth = if (density.fontScale > 1.5f) 220.dp else 136.dp
     val inputFocus = androidx.compose.ui.platform.LocalFocusManager.current
     val inputKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val query by model.query.collectAsState()
@@ -190,23 +200,16 @@ fun PaperLibrary(
                 },
                 leadingIcon = { PaperIcon(PaperGlyph.Search) },
                 trailingIcon = {
-                    if (query.isNotEmpty())
-                        PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
-                    else
-                        Box {
-                            PaperAction("File types", PaperGlyph.Sliders) { types = true }
-                            DropdownMenu(types, { types = false }) {
-                                filters.forEach { (key, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            model.showLibrary(key)
-                                            types = false
-                                        },
-                                    )
-                                }
+                    Row {
+                        if (query.isNotEmpty())
+                            PaperAction("Clear search", PaperGlyph.Close) { model.query.value = "" }
+                        if (short)
+                            PaperAction("File types", PaperGlyph.Add) {
+                                inputFocus.clearFocus()
+                                inputKeyboard?.hide()
+                                types = true
                             }
-                        }
+                    }
                 },
                 shape = RoundedCornerShape(16.dp),
                 colors =
@@ -219,7 +222,11 @@ fun PaperLibrary(
         }
         Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .background(Paper.Header, RoundedCornerShape(14.dp))
+                    .border(BorderStroke(1.dp, Paper.Line), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (selecting)
@@ -276,6 +283,21 @@ fun PaperLibrary(
                                 sorting = false
                             },
                         )
+                        if (browsing && !selecting)
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (parent == null) "Organize unfiled" else "Organize files"
+                                    )
+                                },
+                                leadingIcon = { PaperIcon(PaperGlyph.Move) },
+                                enabled = pages.itemCount > 0,
+                                onClick = {
+                                    selecting = true
+                                    chosen = emptySet()
+                                    sorting = false
+                                },
+                            )
                         DropdownMenuItem(
                             text = { Text("New folder") },
                             onClick = {
@@ -311,19 +333,42 @@ fun PaperLibrary(
                 if (browsing && parent != null)
                     Box(Modifier.padding(horizontal = 8.dp)) { FolderBreadcrumb(model, parent) }
                 search(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
-                Row(
-                    Modifier.fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    filters.forEach { (key, label) ->
-                        FilterChip(
-                            selected = category == key,
-                            onClick = { model.showLibrary(key) },
-                            label = { Text(label, maxLines = 1) },
-                            shape = RoundedCornerShape(14.dp),
-                        )
+                BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    val available = with(density) { (maxWidth - 48.dp).toPx() }
+                    val visible = mutableListOf<Pair<String, String>>()
+                    var used = 0f
+                    for (filter in filters.take(4)) {
+                        val width =
+                            measurer.measure(filter.second, chipStyle).size.width +
+                                with(density) { 40.dp.toPx() }
+                        if (visible.isNotEmpty() && used + width > available) break
+                        visible.add(filter)
+                        used += width
+                    }
+                    if (category != "all" && visible.none { it.first == category }) {
+                        val active = filters.firstOrNull { it.first == category }
+                        if (active != null && visible.size > 1) visible[visible.lastIndex] = active
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        visible.forEach { (key, label) ->
+                            FilterChip(
+                                selected = category == key,
+                                onClick = { model.showLibrary(key) },
+                                label = {
+                                    Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                        }
+                        PaperAction("File types", PaperGlyph.Add) {
+                            inputFocus.clearFocus()
+                            inputKeyboard?.hide()
+                            types = true
+                        }
                     }
                 }
             }
@@ -336,7 +381,7 @@ fun PaperLibrary(
                     Text("Search entire vault")
                 }
             LazyVerticalGrid(
-                columns = if (grid) GridCells.Adaptive(152.dp) else GridCells.Fixed(1),
+                columns = if (grid) GridCells.Adaptive(cellWidth) else GridCells.Fixed(1),
                 state = state,
                 modifier = Modifier.weight(1f).fillMaxWidth().testTag("vault-library"),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -350,46 +395,80 @@ fun PaperLibrary(
                 ) {
                     FolderRow(model, it)
                 }
-                if (visibleFolders.isNotEmpty() && pages.itemCount > 0)
+                if (browsing && pages.itemCount > 0)
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            if (parent == null) "Unfiled" else "Files",
-                            Modifier.padding(top = 8.dp, bottom = 4.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Paper.Muted,
-                        )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (parent == null) "Unfiled" else "Files",
+                                Modifier.weight(1f).padding(vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Paper.Muted,
+                            )
+                            if (!selecting) TextButton({ selecting = true }) { Text("Organize") }
+                        }
                     }
-                items(count = pages.itemCount, key = { pages.peek(it)?.id ?: "placeholder/$it" }) {
-                    index ->
+                items(
+                    count = pages.itemCount,
+                    key = { pages.peek(it)?.id ?: "placeholder/$it" },
+                    span = { index ->
+                        fun wide(at: Int): Boolean {
+                            if (at !in 0 until pages.itemCount) return false
+                            val mime = pages.peek(at)?.mime.orEmpty()
+                            return mime.startsWith("video/") || mime.startsWith("audio/")
+                        }
+                        val finalItem =
+                            index == pages.itemCount - 1 &&
+                                pages.loadState.append.endOfPaginationReached
+                        // Fill a lone card before a full-width media row without changing sort
+                        // order.
+                        val lone =
+                            maxCurrentLineSpan == maxLineSpan && (wide(index + 1) || finalItem)
+                        GridItemSpan(if (!grid || wide(index) || lone) maxLineSpan else 1)
+                    },
+                ) { index ->
                     val item = pages[index]
                     if (item != null) {
                         val checked = item.id in chosen
-                        Row(
+                        Box(
                             Modifier.fillMaxWidth()
-                                .background(
-                                    if (checked) Paper.AccentSoft else Paper.Surface,
+                                .background(Paper.Surface, RoundedCornerShape(12.dp))
+                                .border(
+                                    if (checked) 2.dp else 0.dp,
+                                    if (checked) Paper.Accent
+                                    else androidx.compose.ui.graphics.Color.Transparent,
                                     RoundedCornerShape(12.dp),
-                                ),
-                            verticalAlignment = Alignment.CenterVertically,
+                                )
                         ) {
+                            VaultEntry(
+                                model,
+                                item,
+                                grid,
+                                selecting,
+                                { chosen = if (checked) chosen - item.id else chosen + item.id },
+                                { deleting = item },
+                                {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selecting = true
+                                    chosen = chosen + item.id
+                                },
+                                {
+                                    chosen = setOf(item.id)
+                                    selecting = true
+                                    moving = true
+                                },
+                            )
                             if (selecting)
                                 Checkbox(
                                     checked,
                                     { chosen = if (it) chosen + item.id else chosen - item.id },
-                                    modifier = Modifier.testTag("select-${item.id}"),
+                                    modifier =
+                                        Modifier.align(Alignment.TopEnd)
+                                            .background(Paper.Surface, RoundedCornerShape(12.dp))
+                                            .testTag("select-${item.id}"),
                                 )
-                            Box(Modifier.weight(1f)) {
-                                VaultEntry(
-                                    model,
-                                    item,
-                                    grid,
-                                    selecting,
-                                    {
-                                        chosen = if (checked) chosen - item.id else chosen + item.id
-                                    },
-                                    { deleting = item },
-                                )
-                            }
                         }
                     }
                 }
@@ -490,6 +569,47 @@ fun PaperLibrary(
             }
         }
     }
+    if (types)
+        PaperSheet("File types", { types = false }) {
+            filters.forEach { (key, label) ->
+                val glyph =
+                    when (key) {
+                        "all" -> PaperGlyph.Vault
+                        "notes" -> PaperGlyph.Note
+                        "images" -> PaperGlyph.Image
+                        "videos" -> PaperGlyph.Media
+                        "audio" -> PaperGlyph.Audio
+                        "epub" -> PaperGlyph.Book
+                        else -> PaperGlyph.Document
+                    }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (category == key) Paper.AccentSoft else Paper.Background,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .testTag("file-type-$key")
+                            .selectable(
+                                selected = category == key,
+                                role = androidx.compose.ui.semantics.Role.RadioButton,
+                                onClick = {
+                                    model.showLibrary(key)
+                                    types = false
+                                },
+                            )
+                            .heightIn(min = 52.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        PaperIcon(glyph)
+                        Text(label, Modifier.weight(1f))
+                        if (category == key) PaperIcon(PaperGlyph.Check, "Selected")
+                    }
+                }
+            }
+        }
     if (creating) FolderNameDialog(model, null, if (browsing) parent else null) { creating = false }
     if (moving)
         FolderPicker(model, { moving = false }) {
@@ -585,6 +705,8 @@ private fun VaultEntry(
     selecting: Boolean,
     select: () -> Unit,
     remove: () -> Unit,
+    longSelect: () -> Unit,
+    move: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val visual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
@@ -593,6 +715,21 @@ private fun VaultEntry(
         Box {
             PaperAction("Options for ${item.name}", PaperGlyph.More) { menu = true }
             DropdownMenu(menu, { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Select") },
+                    onClick = {
+                        menu = false
+                        longSelect()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Move to folder") },
+                    leadingIcon = { PaperIcon(PaperGlyph.Move) },
+                    onClick = {
+                        menu = false
+                        move()
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text(if (item.pinned) "Unpin" else "Pin") },
                     onClick = {
@@ -616,17 +753,26 @@ private fun VaultEntry(
     val click = { if (selecting) select() else model.navigate(item.id) }
     if (grid)
         Card(
-            onClick = click,
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier.fillMaxWidth()
+                    .testTag("entry-${item.id}")
+                    .combinedClickable(onClick = click, onLongClick = longSelect),
             colors = CardDefaults.cardColors(containerColor = Paper.Surface),
             border = BorderStroke(1.dp, Paper.Line),
             shape = RoundedCornerShape(12.dp),
         ) {
-            if (visual) PaperThumbnail(model, item, Modifier.fillMaxWidth().height(112.dp))
+            if (visual)
+                PaperThumbnail(
+                    model,
+                    item,
+                    Modifier.fillMaxWidth()
+                        .aspectRatio(if (item.mime.startsWith("video/")) 16f / 9f else 1.3f),
+                )
+            else PaperFileBadge(item.mime, Modifier.padding(start = 12.dp, top = 12.dp), item.name)
             Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
                 Text(
                     item.name,
-                    Modifier.padding(end = 8.dp),
+                    Modifier.padding(end = if (selecting) 44.dp else 8.dp),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -648,7 +794,8 @@ private fun VaultEntry(
         Row(
             Modifier.fillMaxWidth()
                 .heightIn(min = 72.dp)
-                .clickable(onClick = click)
+                .testTag("entry-${item.id}")
+                .combinedClickable(onClick = click, onLongClick = longSelect)
                 .padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -736,7 +883,9 @@ fun ConfirmPaperDelete(name: String, dismiss: () -> Unit, confirm: () -> Unit) {
             Text("“$name” will be removed from this vault. Deleted items cannot be recovered.")
         },
         confirmButton = {
-            TextButton(confirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(confirm, Modifier.testTag("confirm-delete")) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
         },
         dismissButton = { TextButton(dismiss) { Text("Keep item") } },
     )
