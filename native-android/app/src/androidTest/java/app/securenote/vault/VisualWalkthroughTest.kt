@@ -307,6 +307,13 @@ class VisualWalkthroughTest {
                 waitText("Export unencrypted copy?")
                 rule.onNodeWithText("Choose destination").assertIsDisplayed()
                 save("decrypted-export-confirmation")
+                rule.onNodeWithText("Files", substring = false).assertIsSelected()
+                rule
+                    .onNodeWithText("ZIP archive", substring = false)
+                    .performScrollTo()
+                    .performClick()
+                    .assertIsSelected()
+                save("zip-export-confirmation")
                 tool("Close").performClick()
                 rule.runOnIdle {
                     model.originalsToDelete.value =
