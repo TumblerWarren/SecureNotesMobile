@@ -441,6 +441,20 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
                                 .map { File(directory, it) }
                                 .filter { it.isFile } +
                                 dao.objectIds().map { File(directory, "objects/$it.svf") }
+                        require(
+                            files.any { it.name == "header" } && files.any { it.name == "index.db" }
+                        ) {
+                            "Vault is incomplete. Backup was not created."
+                        }
+                        require(files.size + 2 <= 100000) {
+                            "Vault exceeds the backup entry limit."
+                        }
+                        require(
+                            files.fold(0L) { total, file -> Math.addExact(total, file.length()) } <=
+                                1024L * 1024 * 1024 * 1024 - 64
+                        ) {
+                            "Vault exceeds the backup size limit."
+                        }
                         val buffer = ByteArray(64 * 1024)
                         try {
                             for (file in files) {
