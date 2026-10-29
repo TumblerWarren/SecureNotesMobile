@@ -29,13 +29,13 @@ python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
 
 The sodium script builds checksummed upstream source for ARM64 and x86-64. Generated source/binaries stay ignored. Native libraries use 16 KiB-compatible linker alignment.
 
-The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application ID `com.anonymous.SecureNotesMobile.nativepreview`; it installs alongside the existing application. Production builds retain the original application ID. Master builds publish only APKs signed with the configured release key after tests and signature verification pass; missing signing secrets stop publication. Unsigned compilation outputs are excluded from artifacts. See [release signing](docs/RELEASE-SIGNING.md) for setup and upgrade compatibility.
+The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application ID `com.anonymous.SecureNotesMobile.nativepreview`; it installs alongside the existing application. Signed production builds use `com.anonymous.SecureNotesMobile.vault` so they install beside the original app (`com.anonymous.SecureNotesMobile`) with its different signing certificate. The new app has separate storage; original vault data stays in the original app and is not automatically migrated. Do not uninstall the original app to resolve a package conflict. Master builds publish only APKs signed with the configured release key after tests and signature verification pass; missing signing secrets stop publication. Unsigned compilation outputs are excluded from artifacts. See [release signing](docs/RELEASE-SIGNING.md) for setup and upgrade compatibility.
 
 ## Build versions
 
 CI passes its monotonically increasing workflow run number as `ANDROID_BUILD_NUMBER` to both jobs. Each new run uses `versionCode = 1000 + run number` and preview version `2.0.1-build.<run number>-preview`. Thus a post-merge build has a higher version than its preceding PR build. Re-running an existing run retains its version; starting a new manual run advances it. The workflow checks the actual generated APK metadata and publishes the version in the job summary.
 
-Local builds without that environment variable use development code 4 and `2.0.1-dev-preview`; they are not newer than CI builds. Keep the same workflow counter, and raise the offset if that counter is ever reset. Production upgrades also require the original signing key.
+Local builds without that environment variable use development code 4 and `2.0.1-dev-preview`; they are not newer than CI builds. Keep the same workflow counter, and raise the offset if that counter is ever reset. Future native production upgrades must keep the `.vault` application ID and the same native release signing key.
 
 ## Verification
 

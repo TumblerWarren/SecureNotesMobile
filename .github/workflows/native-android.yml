@@ -60,6 +60,9 @@ jobs:
       - name: Release and performance checks
         working-directory: native-android
         run: ./gradlew --continue :core:largeFileTest :app:lintDebug :app:assembleRelease :benchmark:assembleBenchmark
+      - name: Verify production package identity
+        working-directory: native-android
+        run: python3 tools/check_release_package.py app/build/outputs/apk/release/app-release-unsigned.apk
       - name: Report lint errors and generated schema
         if: always()
         working-directory: native-android
@@ -253,10 +256,27 @@ jobs:
       - name: Verify signed APK and prepare release asset
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs native-android/app/build/outputs/apk/release/app-release.apk
+          python3 native-android/tools/check_release_package.py native-android/app/build/outputs/apk/release/app-release.apk
           test ! -e native-android/app/build/outputs/apk/release/app-release-unsigned.apk
           mkdir -p signed-release
           cp native-android/app/build/outputs/apk/release/app-release.apk "signed-release/SecureNote-2.0.1-build.${ANDROID_BUILD_NUMBER}.apk"
           (cd signed-release && sha256sum *.apk > SHA256SUMS.txt)
+      - name: Enable KVM for installation check
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify side-by-side installation and legacy data preservation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          ram-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          working-directory: native-android
+          script: python3 tools/check_release_install.py app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: signed-android-release
@@ -266,7 +286,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "android-build-${ANDROID_BUILD_NUMBER}" signed-release/* --target "$GITHUB_SHA" --title "SecureNote 2.0.1 build ${ANDROID_BUILD_NUMBER}" --notes "Signed native Android vault release. Install the APK. Keep your vault password and recovery key safe; app data deletion cannot be recovered. This release uses the new native app signing key."
+          gh release create "android-build-${ANDROID_BUILD_NUMBER}" signed-release/* --target "$GITHUB_SHA" --title "SecureNote 2.0.1 build ${ANDROID_BUILD_NUMBER}" --notes "Signed native Android vault release. Install the APK. Keep your vault password and recovery key safe; app data deletion cannot be recovered. This release uses the native app signing key and the separate com.anonymous.SecureNotesMobile.vault package. It installs beside the original app; original vault data remains in the original app and is not automatically transferred."
       - name: Remove private signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/securenote-release.p12"
