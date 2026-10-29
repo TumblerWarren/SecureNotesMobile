@@ -324,6 +324,12 @@ class VisualWalkthroughTest {
                 waitText("Delete originals?")
                 rule.onNodeWithText("Keep originals").assertIsDisplayed()
                 rule.onNodeWithText("Delete selected").assertIsDisplayed()
+                val deletionAction = rule.onNodeWithText("Delete selected").fetchSemanticsNode()
+                assertTrue(
+                    "Deletion action must not squeeze words into letter-sized lines",
+                    deletionAction.size.height <=
+                        48f * font * rule.activity.resources.displayMetrics.density + 4,
+                )
                 save("original-deletion-confirmation")
                 rule.onNodeWithText("Keep originals").performClick()
                 rule.runOnIdle { assertTrue(model.originalsToDelete.value.isEmpty()) }
