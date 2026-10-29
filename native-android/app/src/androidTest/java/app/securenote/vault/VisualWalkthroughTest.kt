@@ -296,6 +296,38 @@ class VisualWalkthroughTest {
                 rule.onNodeWithTag("nav-settings").assertIsSelected()
                 rule.onNodeWithTag("settings-header").assertIsDisplayed()
             }
+            step("transfer-confirmations") {
+                home()
+                rule.runOnIdle { model.requestBackup() }
+                waitText("Encrypted backup")
+                rule.onNodeWithText("Choose destination").assertIsDisplayed()
+                save("encrypted-backup-confirmation")
+                tool("Close").performClick()
+                rule.runOnIdle { model.requestExport(listOf(ids.getValue("image"))) }
+                waitText("Export unencrypted copy?")
+                rule.onNodeWithText("Choose destination").assertIsDisplayed()
+                save("decrypted-export-confirmation")
+                tool("Close").performClick()
+                rule.runOnIdle {
+                    model.originalsToDelete.value =
+                        (1..20).map { index ->
+                            VerifiedOriginal(
+                                android.net.Uri.parse(
+                                    "content://app.securenote.synthetictransfers/fixture-$index"
+                                ),
+                                "synthetic-$index",
+                                "Synthetic original $index.png",
+                                ByteArray(32),
+                            )
+                        }
+                }
+                waitText("Delete originals?")
+                rule.onNodeWithText("Keep originals").assertIsDisplayed()
+                rule.onNodeWithText("Delete selected").assertIsDisplayed()
+                save("original-deletion-confirmation")
+                rule.onNodeWithText("Keep originals").performClick()
+                rule.runOnIdle { assertTrue(model.originalsToDelete.value.isEmpty()) }
+            }
             step("password-form") {
                 home()
                 navigateTab("settings")
@@ -722,6 +754,9 @@ class VisualWalkthroughTest {
         rule.runOnIdle {
             model.message.value = ""
             model.legacySource.value = null
+            model.exportRequest.value = null
+            model.originalsToDelete.value = emptyList()
+            model.restoreRequest.value = null
             model.recovery.value = null
             model.query.value = ""
             model.folderBrowsing.value = false
