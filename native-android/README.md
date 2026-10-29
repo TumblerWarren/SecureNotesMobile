@@ -33,6 +33,8 @@ The debug APK is `app/build/outputs/apk/debug/app-debug.apk`, with application I
 
 ## Build versions
 
+The production release package ID is `com.anonymous.SecureNotesMobile.vault`. Install signed releases from [GitHub Releases](https://github.com/TumblerWarren/SecureNotesMobile/releases/latest); the original app uses a different package and separate storage.
+
 CI passes its monotonically increasing workflow run number as `ANDROID_BUILD_NUMBER` to both jobs. Each new run uses `versionCode = 1000 + run number` and preview version `2.0.1-build.<run number>-preview`. Thus a post-merge build has a higher version than its preceding PR build. Re-running an existing run retains its version; starting a new manual run advances it. The workflow checks the actual generated APK metadata and publishes the version in the job summary.
 
 Local builds without that environment variable use development code 4 and `2.0.1-dev-preview`; they are not newer than CI builds. Keep the same workflow counter, and raise the offset if that counter is ever reset. Future native production upgrades must keep the `.vault` application ID and the same native release signing key.
