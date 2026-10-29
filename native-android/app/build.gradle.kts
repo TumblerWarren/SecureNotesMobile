@@ -24,7 +24,7 @@ android {
     compileSdk = 36
     ndkVersion = "27.2.12479018"
     defaultConfig {
-        applicationId = "com.anonymous.SecureNotesMobile"
+        applicationId = "app.securenote.vault"
         minSdk = 26
         targetSdk = 36
         versionCode = appVersionCode
@@ -57,7 +57,6 @@ android {
         }
         release {
             // The native vault uses a new signing key. Keep legacy installs and their data intact.
-            applicationIdSuffix = ".vault"
             if (releaseKeystore != null) signingConfig = signingConfigs.getByName("vaultRelease")
             isMinifyEnabled = true
             isShrinkResources = true
