@@ -104,6 +104,7 @@ internal fun PaperSheet(
     dismiss: () -> Unit,
     footer: @Composable (() -> Unit)? = null,
     scrollContent: Boolean = true,
+    compactOnKeyboard: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(
@@ -116,6 +117,11 @@ internal fun PaperSheet(
             ),
     ) {
         PaperDialogBars()
+        val compactInput =
+            compactOnKeyboard &&
+                paperKeyboardVisible() &&
+                androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
         BoxWithConstraints(
             Modifier.fillMaxSize().safeDrawingPadding().imePadding(),
             contentAlignment = Alignment.BottomCenter,
@@ -135,31 +141,37 @@ internal fun PaperSheet(
             Surface(
                 Modifier.widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .heightIn(max = if (scrollContent) maxHeight * .92f else maxHeight)
+                    .heightIn(
+                        max = if (scrollContent && !compactInput) maxHeight * .92f else maxHeight
+                    )
                     // Blank space inside the panel must not fall through to the backdrop.
                     .pointerInput(Unit) { detectTapGestures(onTap = {}) },
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                shape =
+                    if (compactInput) RoundedCornerShape(8.dp)
+                    else RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = Paper.Background,
             ) {
                 Column(Modifier.secureEditing()) {
-                    Box(
-                        Modifier.align(Alignment.CenterHorizontally)
-                            .padding(top = 10.dp)
-                            .size(36.dp, 4.dp)
-                            .background(Paper.Line, RoundedCornerShape(4.dp))
-                    )
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            title,
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    if (!compactInput) {
+                        Box(
+                            Modifier.align(Alignment.CenterHorizontally)
+                                .padding(top = 10.dp)
+                                .size(36.dp, 4.dp)
+                                .background(Paper.Line, RoundedCornerShape(4.dp))
                         )
-                        PaperAction("Close", PaperGlyph.Close, action = dismiss)
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                title,
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            PaperAction("Close", PaperGlyph.Close, action = dismiss)
+                        }
                     }
                     Column(
                         Modifier.weight(1f, fill = false)
@@ -167,11 +179,16 @@ internal fun PaperSheet(
                                 if (scrollContent) Modifier.verticalScroll(rememberScrollState())
                                 else Modifier
                             )
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(
+                                horizontal = if (compactInput) 4.dp else 16.dp,
+                                vertical = if (compactInput) 4.dp else 8.dp,
+                            ),
                         content = content,
                     )
-                    if (footer != null) Box(Modifier.fillMaxWidth().padding(16.dp)) { footer() }
-                    else Spacer(Modifier.height(12.dp))
+                    if (!compactInput) {
+                        if (footer != null) Box(Modifier.fillMaxWidth().padding(16.dp)) { footer() }
+                        else Spacer(Modifier.height(12.dp))
+                    }
                 }
             }
         }
