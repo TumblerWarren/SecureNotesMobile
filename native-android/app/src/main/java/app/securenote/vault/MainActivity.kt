@@ -204,40 +204,34 @@ internal fun VaultApp(model: VaultModel) {
     ) {
         val hideChrome = imeVisible || maxHeight < 180.dp
         Column(Modifier.fillMaxSize()) {
-            if ((!open || recovery != null) && !hideChrome) {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .heightIn(min = 48.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            if (!open || (recovery != null && !hideChrome)) {
+                val compactHeader = !open && hideChrome && maxHeight < 220.dp
+                PaperHeader(
+                    "SecureNote",
+                    Modifier.testTag("welcome-header"),
+                    compact = compactHeader,
+                    leading = {
+                        Image(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_brand),
+                            contentDescription = null,
+                            modifier =
+                                Modifier.padding(start = 8.dp)
+                                    .size(if (compactHeader) 24.dp else 32.dp),
+                        )
+                    },
                 ) {
-                    Image(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_brand),
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "SecureNote",
-                        style =
-                            MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = FontFamily.Serif
-                            ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
                     if (open)
-                        TextButton({
+                        PaperAction("Lock", PaperGlyph.Lock) {
                             model.lock()
                             focus.clearFocus()
                             keyboard?.hide()
-                        }) {
-                            PaperIcon(PaperGlyph.Lock)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Lock")
                         }
-                    else PaperIcon(PaperGlyph.Lock, color = Paper.Muted)
+                    else
+                        PaperIcon(
+                            PaperGlyph.Lock,
+                            modifier = Modifier.padding(end = 12.dp).size(20.dp),
+                            color = Paper.Muted,
+                        )
                 }
             }
             if (busy)
@@ -282,33 +276,7 @@ internal fun VaultApp(model: VaultModel) {
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
                 )
             when {
-                !open ->
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                        val viewportHeight = maxHeight
-                        Column(
-                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Column(
-                                Modifier.widthIn(max = 420.dp)
-                                    .fillMaxWidth()
-                                    .heightIn(min = viewportHeight)
-                                    .padding(
-                                        horizontal = 16.dp,
-                                        vertical = if (hideChrome) 4.dp else 16.dp,
-                                    ),
-                                verticalArrangement =
-                                    Arrangement.spacedBy(
-                                        12.dp,
-                                        if (hideChrome) Alignment.Top
-                                        else Alignment.CenterVertically,
-                                    ),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                LockScreen(model, busy, hideChrome)
-                            }
-                        }
-                    }
+                !open -> WelcomePage(model, busy, hideChrome, Modifier.weight(1f))
                 recovery != null ->
                     Column(
                         Modifier.weight(1f)
@@ -509,7 +477,7 @@ internal fun VaultApp(model: VaultModel) {
 }
 
 @Composable
-private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) {
+internal fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     var recoveryMode by remember { mutableStateOf(false) }
@@ -520,25 +488,21 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
     val keyboardOpen = paperKeyboardVisible() || compactInput
     Text(
         if (recoveryMode) "A way back in."
-        else if (creating) "A private place for everything." else "Welcome back.",
+        else if (creating) "Create your vault." else "Welcome back.",
         style =
             if (keyboardOpen) MaterialTheme.typography.titleLarge
             else MaterialTheme.typography.headlineSmall,
         modifier = Modifier.fillMaxWidth(),
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
     )
-    Text(
-        if (recoveryMode) "Use your recovery key to choose a new password."
-        else if (creating)
-            "Your thoughts, documents and moments. Kept on this device, behind your password."
-        else "Enter your password to open your vault.",
-        color = Paper.Muted,
-        style =
-            if (keyboardOpen) MaterialTheme.typography.bodySmall
-            else MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.fillMaxWidth(),
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-    )
+    if (recoveryMode)
+        Text(
+            "Use your recovery key to choose a new password.",
+            color = Paper.Muted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     if (recoveryMode)
         OutlinedTextField(
             secret,
@@ -645,16 +609,21 @@ private fun LockScreen(model: VaultModel, busy: Boolean, compactInput: Boolean) 
         ) {
             Text(if (recoveryMode) "Use password" else "Use recovery key")
         }
-    if (!keyboardOpen) {
-        HorizontalDivider(color = Paper.Line, modifier = Modifier.padding(top = 12.dp))
-        Text(
-            if (model.pendingImports.isNotEmpty())
-                "Unlock to import your selected files. Originals remain outside the vault."
-            else
-                "On this device. No cloud backup. Deleting app storage permanently deletes your vault.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Paper.Muted,
-        )
+    if (!keyboardOpen && (creating || model.pendingImports.isNotEmpty())) {
+        Surface(color = Paper.Inset, shape = RoundedCornerShape(12.dp)) {
+            Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PaperIcon(PaperGlyph.Shield, modifier = Modifier.size(20.dp), color = Paper.Muted)
+                Text(
+                    if (model.pendingImports.isNotEmpty())
+                        "Unlock to import your selected files. Originals remain outside the vault."
+                    else
+                        "On this device. No cloud backup. Deleting app storage permanently deletes your vault.",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Paper.Muted,
+                )
+            }
+        }
     }
     DisposableEffect(Unit) {
         onDispose {
