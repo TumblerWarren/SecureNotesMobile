@@ -133,7 +133,10 @@ internal fun VaultTransferDialogs(model: VaultModel) {
             },
         ) {
             Text(
-                "Restore is available only before creating a vault. Enter the password used when the backup was created. Your backup is checked before installation."
+                if (recoveryMode)
+                    "Enter the backup's recovery key and choose a new password of at least 16 characters. Restore never replaces an existing vault."
+                else
+                    "Restore is available only before creating a vault. Enter the password used when the backup was created. Your backup is checked before installation."
             )
             TextButton({
                 recoveryMode = !recoveryMode
