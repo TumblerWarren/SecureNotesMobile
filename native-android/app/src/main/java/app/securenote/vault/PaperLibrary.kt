@@ -781,6 +781,31 @@ private fun VaultEntry(
     move: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var renaming by remember(item.id) { mutableStateOf(false) }
+    var renameValue by remember(item.id) { mutableStateOf(item.name) }
+    if (renaming)
+        PaperSheet(
+            "Rename file",
+            { renaming = false },
+            footer = {
+                Button(
+                    {
+                        model.renameNote(item.id, renameValue.trim())
+                        renaming = false
+                    },
+                    Modifier.fillMaxWidth(),
+                    enabled = renameValue.isNotBlank(),
+                ) { Text("Save") }
+            },
+        ) {
+            OutlinedTextField(
+                renameValue,
+                { renameValue = it.take(255) },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().secureEditing(),
+            )
+        }
     val visual = item.mime.startsWith("image/") || item.mime.startsWith("video/")
     @Composable
     fun options() {
@@ -792,6 +817,15 @@ private fun VaultEntry(
                     onClick = {
                         menu = false
                         longSelect()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Rename") },
+                    leadingIcon = { PaperIcon(PaperGlyph.Draw) },
+                    onClick = {
+                        menu = false
+                        renameValue = item.name
+                        renaming = true
                     },
                 )
                 DropdownMenuItem(
