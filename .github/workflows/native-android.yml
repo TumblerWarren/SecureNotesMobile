@@ -1,8 +1,7 @@
 name: Native Android
 on:
-  pull_request:
+  push:
     branches: [master]
-    types: [closed]
 concurrency:
   group: native-android-${{ github.ref }}
   cancel-in-progress: true
@@ -11,8 +10,36 @@ permissions:
 env:
   ANDROID_BUILD_NUMBER: ${{ github.run_number }}
 jobs:
+  merge-check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.pr.outputs.merged }}
+    steps:
+      - name: Confirm this master commit came from a merged pull request
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prs = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              { ...context.repo, commit_sha: context.sha, per_page: 100 }
+            );
+            const merged = prs.find(pr =>
+              pr.merged_at &&
+              pr.base.ref === 'master' &&
+              pr.base.repo.full_name === `${context.repo.owner}/${context.repo.repo}` &&
+              pr.merge_commit_sha === context.sha
+            );
+            core.setOutput('merged', merged ? 'true' : 'false');
+            core.notice(merged
+              ? `Building master after merged PR #${merged.number}: ${context.sha}`
+              : `Skipping build: ${context.sha} is not a merged PR commit on master.`);
   verify:
-    if: github.event.pull_request.merged == true
+    needs: merge-check
+    if: needs.merge-check.outputs.merged == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -145,7 +172,8 @@ jobs:
             native-android/app/build/outputs/androidTest-results/
 
   visual-audit:
-    if: github.event.pull_request.merged == true
+    needs: merge-check
+    if: needs.merge-check.outputs.merged == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -230,8 +258,8 @@ jobs:
             native-android/app/build/outputs/apk/debug/*.apk
 
   signed-release:
-    if: github.event.pull_request.merged == true && github.base_ref == 'master'
-    needs: [verify, visual-audit]
+    if: needs.merge-check.outputs.merged == 'true' && github.ref == 'refs/heads/master'
+    needs: [merge-check, verify, visual-audit]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -19,7 +19,7 @@ Arbitrary files can be stored. Office document previews, password-protected PDFs
 
 ## Build
 
-GitHub Actions builds and verifies the app only after a pull request is merged into `master`. Opening or updating a pull request, closing it without merging, and direct pushes do not start the workflow. The workflow runs the core and app JVM tests, builds the preview APK, and uploads it as the `native-android-preview` artifact. Existing device checks and signed-release gates follow the build. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records earlier validation results and links the preview APK, recordings and actual screen captures.
+GitHub Actions builds and verifies the app only after a pull request is merged into `master`. The workflow is recorded against `master`; a guard checks that the pushed commit belongs to a merged PR, including merge, squash, and rebase merges. Opening or updating a pull request and closing it without merging do not trigger it. Direct pushes run only the guard and skip the build jobs. The workflow runs the core and app JVM tests, builds the preview APK, and uploads it as the `native-android-preview` artifact. Existing device checks and signed-release gates follow the build. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records earlier validation results and links the preview APK, recordings and actual screen captures.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 
