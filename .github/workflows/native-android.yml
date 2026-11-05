@@ -13,7 +13,7 @@ env:
 jobs:
   verify:
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +84,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Release build JVM memory before emulator startup
+        working-directory: native-android
+        run: ./gradlew --stop
       - name: Instrumentation tests
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
@@ -94,9 +98,22 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -verbose
           working-directory: native-android
           script: bash tools/run_device_checks.sh
 
+      - name: Capture emulator host diagnostics
+        if: failure()
+        run: |
+          mkdir -p native-android/app/build/reports/emulator-host
+          {
+            uname -a
+            free -h
+            df -h
+            ls -l /dev/kvm
+            ps -eo pid,ppid,comm,rss --sort=-rss | head -n 25
+          } > native-android/app/build/reports/emulator-host/resources.txt 2>&1
+          sudo journalctl -k --no-pager --since '-30 minutes' | grep -Ei 'out of memory|oom|killed process|kvm|segfault' > native-android/app/build/reports/emulator-host/kernel.txt || true
       - name: Report device test failures
         if: always()
         working-directory: native-android
@@ -125,10 +142,11 @@ jobs:
             native-android/app/build/reports/
             native-android/core/build/reports/
             native-android/app/schemas/
+            native-android/app/build/outputs/androidTest-results/
 
   visual-audit:
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -165,6 +183,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Release build JVM memory before emulator startup
+        working-directory: native-android
+        run: ./gradlew --stop
       - name: Record synthetic app walkthroughs
         if: ${{ !cancelled() && steps.visual-compile.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
@@ -177,6 +199,7 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -verbose
           working-directory: native-android
           script: bash tools/run_device_checks.sh
       - name: Report visual evidence
@@ -209,7 +232,7 @@ jobs:
   signed-release:
     if: github.event.pull_request.merged == true && github.base_ref == 'master'
     needs: [verify, visual-audit]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
@@ -268,6 +291,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Release build JVM memory before emulator startup
+        working-directory: native-android
+        run: ./gradlew --stop
       - name: Verify side-by-side installation and legacy data preservation
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -277,6 +304,7 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -verbose
           working-directory: native-android
           script: python3 tools/check_release_install.py app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
