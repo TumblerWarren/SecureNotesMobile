@@ -2,7 +2,7 @@
 
 SecureNote is a native Android vault for encrypted notes and files. Supported images, PDF and EPUB documents, music and video can be opened inside the app.
 
-[Download the latest signed APK](https://github.com/TumblerWarren/SecureNotesMobile/releases/latest) · [SecureNote 2.0.1 build 93 release notes](https://github.com/TumblerWarren/SecureNotesMobile/releases/tag/android-build-93) · [Native Android documentation](native-android/README.md)
+[Latest signed APK and release notes](https://github.com/TumblerWarren/SecureNotesMobile/releases/latest) · [Native Android documentation](native-android/README.md)
 
 The vault stores its encrypted database and encrypted files in app-private storage. You can make a manual encrypted backup to a local or cloud document provider, and export selected files as readable documents or plaintext.
 
