@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Only these fixed synthetic fixture captures are collected from the debug test app.
-set -u
+set -uo pipefail
+mkdir -p app/build/reports
 test_result=0
 if [[ "${VISUAL_AUDIT_ONLY:-false}" == "true" ]]; then
-  ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.securenote.vault.VisualWalkthroughTest || test_result=$?
+  ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.securenote.vault.VisualWalkthroughTest --stacktrace --console=plain 2>&1 | tee app/build/reports/device-test-command.log || test_result=$?
 else
-  ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=app.securenote.vault.VisualWalkthroughTest || test_result=$?
+  ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=app.securenote.vault.VisualWalkthroughTest --stacktrace --console=plain 2>&1 | tee app/build/reports/device-test-command.log || test_result=$?
 fi
 mkdir -p app/build/reports/ui-screenshots
 for capture in normal-library normal-notes normal-folders large-library large-notes large-folders normal-pdf large-pdf; do
@@ -23,4 +24,5 @@ python3 tools/visual_contact_sheets.py || test_result=1
 fi
 adb logcat -d -s VaultMedia:W || true
 adb logcat -d -s AndroidRuntime:E > app/build/reports/runtime-errors.log || true
+echo "Device test command exit status: $test_result"
 exit "$test_result"
