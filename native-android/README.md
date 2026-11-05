@@ -11,6 +11,7 @@ Native Kotlin/Compose rewrite of SecureNotesMobile. Vault data stays in app-priv
 - Encrypted folder hierarchies, a unified folder/file list, breadcrumbs, folder import, colors, moving, renaming, and arranging selected files by type.
 - Internal EPUB 2/3 reading for DRM-free reflowable books, with chapter contents, section navigation, inline raster images, internal links, font-size controls and encrypted reading position. See [EPUB support and limits](docs/EPUB.md).
 - Native rich-text blocks, lists, links, tables, colored drawings, attachments, search and pinning. Drafts survive block recycling; formatting preserves the native selection; debounced saves serialize only changed text blocks. See [notes optimization research and implementation](docs/NOTES-PERFORMANCE.md), [native notes implementation](docs/NOTES.md) and the [drawing canvas review and upgrade proposal](docs/DRAWING-RESEARCH.md).
+- Encrypted [trackers](docs/TRACKERS.md) with named categories, editable Reading/Checklist/Custom formats, thumbnail images, counts, status choices, text fields, and checklist progress.
 - Read-only legacy importer: decrypts the old database in an isolated process into memory, converts notes and embedded media, retains original HTML inside encrypted storage, and leaves the source untouched.
 - JVM security tests, Android functional/security/performance tests, a >4 GiB bounded-heap test, Macrobenchmark and profile generation tooling.
 
@@ -18,7 +19,7 @@ Arbitrary files can be stored. Office document previews, password-protected PDFs
 
 ## Build
 
-GitHub Actions builds and verifies pull requests, Android-related pushes/merges to `master`, and manual workflow dispatches. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records validation results and links the preview APK, recordings and actual screen captures. Local Gradle startup is blocked by the execution environment’s socket restrictions.
+GitHub Actions builds and verifies the app only after a pull request is merged into `master`. Opening or updating a pull request, closing it without merging, and direct pushes do not start the workflow. The workflow runs the core and app JVM tests, builds the preview APK, and uploads it as the `native-android-preview` artifact. Existing device checks and signed-release gates follow the build. The [approved Paper redesign implementation](docs/design/APPROVED-UI-IMPLEMENTATION.md) records earlier validation results and links the preview APK, recordings and actual screen captures.
 
 Requires JDK 21, Android SDK platform 36, build tools 35, NDK 27.2.12479018, CMake 3.22.1, Python 3.12+ and make. Set `ANDROID_HOME` or an untracked `local.properties` with `sdk.dir=/absolute/sdk/path`.
 

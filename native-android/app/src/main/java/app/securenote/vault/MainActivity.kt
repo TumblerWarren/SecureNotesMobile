@@ -126,6 +126,7 @@ internal fun VaultApp(model: VaultModel) {
     val attach by model.attachmentPicker.collectAsState()
     val recovery by model.recovery.collectAsState()
     var settings by remember { mutableStateOf(false) }
+    var trackers by remember { mutableStateOf(false) }
     var passwordChanging by remember { mutableStateOf(false) }
     val settingsScroll = rememberScrollState()
     val passwordScroll = rememberScrollState()
@@ -178,6 +179,7 @@ internal fun VaultApp(model: VaultModel) {
     LaunchedEffect(open) {
         if (!open) {
             settings = false
+            trackers = false
             adding = false
         }
     }
@@ -189,7 +191,9 @@ internal fun VaultApp(model: VaultModel) {
     }
     val folderParent by model.folderId.collectAsState()
     val browsingFolders by model.folderBrowsing.collectAsState()
-    BackHandler(open && !settings && selected == null && browsingFolders && folderParent != null) {
+    BackHandler(
+        open && !settings && !trackers && selected == null && browsingFolders && folderParent != null
+    ) {
         model.folderUp()
     }
     BackHandler(open && settings && selected == null) {
@@ -385,15 +389,15 @@ internal fun VaultApp(model: VaultModel) {
                                         Surface(
                                             Modifier.fillMaxSize()
                                                 .then(
-                                                    if (settings)
-                                                        Modifier.testTag("settings-header")
+                                                    if (settings) Modifier.testTag("settings-header")
+                                                    else if (trackers) Modifier.testTag("trackers-header")
                                                     else Modifier
                                                 ),
                                             color = Paper.Header,
                                             shape = RoundedCornerShape(14.dp),
                                             border = BorderStroke(1.dp, Paper.Line),
                                         ) {
-                                            if (settings)
+                                            if (settings || trackers)
                                                 Column(
                                                     Modifier.fillMaxSize()
                                                         .verticalScroll(rememberScrollState()),
@@ -401,13 +405,14 @@ internal fun VaultApp(model: VaultModel) {
                                                         Alignment.CenterHorizontally,
                                                 ) {
                                                     Text(
-                                                        if (passwordChanging) "Password"
+                                                        if (trackers) "Trackers"
+                                                        else if (passwordChanging) "Password"
                                                         else "Settings",
                                                         Modifier.padding(6.dp),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         maxLines = 2,
                                                     )
-                                                    if (passwordChanging)
+                                                    if (settings && passwordChanging)
                                                         PaperAction(
                                                             "Back",
                                                             PaperGlyph.Back,
@@ -426,10 +431,11 @@ internal fun VaultApp(model: VaultModel) {
                                     } else
                                         PaperTabHeader(
                                             if (settings) Modifier.testTag("settings-header")
+                                            else if (trackers) Modifier.testTag("trackers-header")
                                             else Modifier
                                         ) {
-                                            if (settings) {
-                                                if (passwordChanging)
+                                            if (settings || trackers) {
+                                                if (settings && passwordChanging)
                                                     PaperAction(
                                                         "Back",
                                                         PaperGlyph.Back,
@@ -440,7 +446,8 @@ internal fun VaultApp(model: VaultModel) {
                                                         passwordChanging = false
                                                     }
                                                 Text(
-                                                    if (passwordChanging) "Change password"
+                                                    if (trackers) "Trackers"
+                                                    else if (passwordChanging) "Change password"
                                                     else "Settings",
                                                     Modifier.weight(1f).padding(horizontal = 12.dp),
                                                     style = MaterialTheme.typography.titleLarge,
@@ -478,6 +485,7 @@ internal fun VaultApp(model: VaultModel) {
                                                     launchDocumentPicker { treePicker.launch(null) }
                                                 },
                                             )
+                                        else if (trackers) TrackerScreen(model)
                                         else libraryContent()
                                     }
                                 },
@@ -489,6 +497,7 @@ internal fun VaultApp(model: VaultModel) {
                                                     Triple("all", "Vault", PaperGlyph.Shield),
                                                     Triple("notes", "Notes", PaperGlyph.Note),
                                                     Triple("folders", "Folders", PaperGlyph.Vault),
+                                                    Triple("trackers", "Trackers", PaperGlyph.List),
                                                     Triple(
                                                         "settings",
                                                         "Settings",
@@ -498,8 +507,9 @@ internal fun VaultApp(model: VaultModel) {
                                                 .forEach { (key, label, glyph) ->
                                                     val active =
                                                         if (key == "settings") settings
+                                                        else if (key == "trackers") trackers
                                                         else
-                                                            !settings &&
+                                                            !settings && !trackers &&
                                                                 when (key) {
                                                                     "all" ->
                                                                         !browsingFolders &&
@@ -514,9 +524,11 @@ internal fun VaultApp(model: VaultModel) {
                                                             focus.clearFocus()
                                                             keyboard?.hide()
                                                             settings = key == "settings"
+                                                            trackers = key == "trackers"
+                                                            model.touch()
                                                             if (key == "folders")
                                                                 model.openFolder(null)
-                                                            else if (key != "settings") {
+                                                            else if (key != "settings" && key != "trackers") {
                                                                 model.folderBrowsing.value = false
                                                                 model.showLibrary(key)
                                                             }

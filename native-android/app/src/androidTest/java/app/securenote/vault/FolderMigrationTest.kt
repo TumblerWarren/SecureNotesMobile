@@ -51,7 +51,7 @@ class FolderMigrationTest {
             val db =
                 Room.databaseBuilder<VaultDatabase>(context, file.path)
                     .setDriver(SQLCipherDriver(key, null, null))
-                    .addMigrations(FolderMigration)
+                    .addMigrations(FolderMigration, TrackerMigration)
                     .build()
             try {
                 assertEquals("Original body", db.items().originalBody("old-note"))

@@ -43,6 +43,12 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
             return checkNotNull(database).items()
         }
 
+    val trackerDao: Trackers
+        get() {
+            check(isOpen)
+            return checkNotNull(database).trackers()
+        }
+
     private fun header(): VaultHeader {
         val bytes =
             headerFile.openRead().use { input ->
@@ -177,6 +183,7 @@ class VaultStore(private val context: Context, directoryName: String = "vault-v1
                             }
                         },
                         FolderMigration,
+                        TrackerMigration,
                     )
                     .setQueryCoroutineContext(Dispatchers.IO.limitedParallelism(2))
                     .addCallback(

@@ -824,6 +824,70 @@ internal constructor(
             onResult?.invoke(null)
         }
 
+    fun saveTrackerCategory(value: TrackerCategory, onSaved: () -> Unit) {
+        if (!unlocked.value) return
+        val epoch = generation
+        runWork("Save tracker category") {
+            require(unlocked.value)
+            touch()
+            TrackerRepository(store).saveCategory(value)
+            if (unlocked.value && generation == epoch) onSaved()
+        }
+    }
+
+    fun saveTrackerEntry(value: TrackerEntry, onSaved: () -> Unit) {
+        if (!unlocked.value) return
+        val epoch = generation
+        runWork("Save tracker item") {
+            require(unlocked.value)
+            touch()
+            TrackerRepository(store).saveEntry(value)
+            if (unlocked.value && generation == epoch) onSaved()
+        }
+    }
+
+    fun deleteTrackerCategory(id: String, onDeleted: () -> Unit) {
+        if (!unlocked.value) return
+        val epoch = generation
+        runWork("Delete tracker category") {
+            require(unlocked.value)
+            touch()
+            TrackerRepository(store).deleteCategory(id)
+            if (unlocked.value && generation == epoch) onDeleted()
+        }
+    }
+
+    fun deleteTrackerEntry(id: String, onDeleted: () -> Unit) {
+        if (!unlocked.value) return
+        val epoch = generation
+        runWork("Delete tracker item") {
+            require(unlocked.value)
+            touch()
+            TrackerRepository(store).deleteEntry(id)
+            if (unlocked.value && generation == epoch) onDeleted()
+        }
+    }
+
+    fun setTrackerCheckbox(entryId: String, fieldId: String, checked: Boolean) {
+        if (!unlocked.value) return
+        runWork("Update tracker item") {
+            require(unlocked.value)
+            touch()
+            TrackerRepository(store).setCheckbox(entryId, fieldId, checked)
+        }
+    }
+
+    fun importTrackerImage(uri: Uri, onImported: (String) -> Unit) {
+        if (!unlocked.value) return
+        val epoch = generation
+        runWork("Import tracker image") {
+            require(unlocked.value)
+            touch()
+            val id = store.import(uri, null) {}
+            if (unlocked.value && generation == epoch) onImported(id)
+        }
+    }
+
     fun moveFiles(ids: List<String>, destination: String?) = runWork {
         store.dao.moveItems(ids, destination)
     }
