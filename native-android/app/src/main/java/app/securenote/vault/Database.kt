@@ -448,10 +448,14 @@ interface Items {
             FolderItem::class,
             FolderImportJob::class,
             FolderImportEntry::class,
+            TrackerCategory::class,
+            TrackerEntry::class,
         ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class VaultDatabase : RoomDatabase() {
     abstract fun items(): Items
+
+    abstract fun trackers(): Trackers
 }

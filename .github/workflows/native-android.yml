@@ -1,11 +1,8 @@
 name: Native Android
 on:
-  push:
-    branches: [master]
-    paths: ['native-android/**', '.github/workflows/native-android.yml']
   pull_request:
-    paths: ['native-android/**', '.github/workflows/native-android.yml']
-  workflow_dispatch:
+    branches: [master]
+    types: [closed]
 concurrency:
   group: native-android-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +12,7 @@ env:
   ANDROID_BUILD_NUMBER: ${{ github.run_number }}
 jobs:
   verify:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -32,13 +30,16 @@ jobs:
           cache-read-only: false
       - name: Install Android build dependencies
         run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Run JVM tests
+        working-directory: native-android
+        run: ./gradlew :core:test :app:testDebugUnitTest
       - name: Build pinned native Argon2 library
         working-directory: native-android
         run: python3 tools/build_sodium.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
       - name: Compile functional tests
         id: compile
         working-directory: native-android
-        run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Verify generated APK version
         working-directory: native-android
         run: |
@@ -73,9 +74,9 @@ jobs:
               for issue in ET.parse(report).getroot().findall('issue'):
                   if issue.get('severity') in ('Error', 'Fatal'):
                       print(ET.tostring(issue, encoding='unicode'))
-          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/4.json')
+          schema = pathlib.Path('app/schemas/app.securenote.vault.VaultDatabase/5.json')
           if schema.exists():
-              print('GENERATED_SCHEMA_4=' + schema.read_text().replace('\n', ''))
+              print('GENERATED_SCHEMA_5=' + schema.read_text().replace('\n', ''))
           PYREPORT
       - name: Enable KVM
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
@@ -126,6 +127,7 @@ jobs:
             native-android/app/schemas/
 
   visual-audit:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -205,7 +207,7 @@ jobs:
             native-android/app/build/outputs/apk/debug/*.apk
 
   signed-release:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    if: github.event.pull_request.merged == true && github.base_ref == 'master'
     needs: [verify, visual-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 30
